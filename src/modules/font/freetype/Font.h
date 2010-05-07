@@ -22,10 +22,7 @@
 #define LOVE_FONT_FREETYPE_FONT_H
 
 // LOVE
-#include <filesystem/File.h>
-#include <font/Rasterizer.h>
-#include <image/ImageData.h>
-#include <common/Module.h>
+#include <font/Font.h>
 
 // FreeType2
 #ifdef LOVE_MACOSX
@@ -45,7 +42,7 @@ namespace font
 namespace freetype
 {
 
-	class Font : public Module
+	class Font : public love::font::Font
 	{
 	private:
 
@@ -55,16 +52,19 @@ namespace freetype
 	public:
 
 		Font();
-
+		
 		/**
 		* Destructor.
 		**/
 		virtual ~Font();
-
+		
+		// Implements Font
 		Rasterizer * newRasterizer(Data * data, int size);
-		Rasterizer * newRasterizer(love::image::ImageData * data, unsigned short * glyphs);
+		Rasterizer * newRasterizer(love::image::ImageData * data, std::string glyphs);
+		Rasterizer * newRasterizer(love::image::ImageData * data, unsigned short * glyphs, int length);
 		GlyphData * newGlyphData(Rasterizer * r, unsigned short glyph);
-
+		FontData * newFontData(Rasterizer * r);
+		
 		// Implement Module
 		const char * getName() const;
 

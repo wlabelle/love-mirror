@@ -18,57 +18,29 @@
 * 3. This notice may not be removed or altered from any source distribution.
 **/
 
-#ifndef LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H
-#define LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H
+#include "wrap_FontData.h"
 
-// LOVE
-#include <filesystem/File.h>
-#include <font/Rasterizer.h>
-
-// TrueType2
-#ifdef LOVE_MACOSX
-#include <freetype/ft2build.h>
-#else
-#include <ft2build.h>
-#endif
-#include <freetype/freetype.h>
-#include <freetype/ftglyph.h>
-#include <freetype/ftoutln.h>
-#include <freetype/fttrigon.h>
+#include <common/wrap_Data.h>
 
 namespace love
 {
 namespace font
 {
-namespace freetype
-{
-	/**
-	* Holds data for a font object.
-	**/
-	class TrueTypeRasterizer : public Rasterizer
+	FontData * luax_checkfontdata(lua_State * L, int idx)
 	{
-	private:
+		return luax_checktype<FontData>(L, idx, "FontData", FONT_FONT_DATA_T);
+	}
+	
+	static const luaL_Reg functions[] = {
+		{ "getPointer", w_Data_getPointer },
+		{ "getSize", w_Data_getSize },
+		{ 0, 0 }
+	};
 
+	int luaopen_fontdata(lua_State * L)
+	{
+		return luax_register_type(L, "FontData", functions);
+	}
 
-		// TrueType face
-		FT_Face face;
-
-		// File data
-		Data * data;
-		
-	public:
-		TrueTypeRasterizer(FT_Library library, Data * data, int size);
-		virtual ~TrueTypeRasterizer();
-
-		// Implement Rasterizer
-		virtual int getLineHeight() const;
-		virtual GlyphData * getGlyphData(unsigned short glyph) const;
-		virtual int getNumGlyphs() const;
-
-	}; // FreetypeRasterizer
-
-} // freetype
 } // font
 } // love
-
-#endif // LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H

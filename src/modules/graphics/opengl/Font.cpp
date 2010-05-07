@@ -20,53 +20,91 @@
 
 #include "Font.h"
 
+#include <common/math.h>
+#include <math.h>
+
 namespace love
 {
 namespace graphics
 {
 namespace opengl
 {
-	Font::Font(int size) 
-		: size(size), lineHeight(1), mSpacing(1)
+	
+	Font::Font(love::font::FontData * data)
+	: height(data->getHeight()), lineHeight(1.25), mSpacing(1)
 	{
+		glyphs = new Glyph*[MAX_CHARS];
 		for(unsigned int i = 0; i < MAX_CHARS; i++)
 		{
-			widths[i] = 0;
-			spacing[i] = 0;
+			glyphs[i] = new Glyph(data->getGlyphData(i));
+			glyphs[i]->load();
+			widths[i] = data->getGlyphData(i)->getWidth();
+			spacing[i] = data->getGlyphData(i)->getAdvance();
+			bearingX[i] = data->getGlyphData(i)->getBearingX();
+			bearingY[i] = data->getGlyphData(i)->getBearingY();
 		}
 	}
 
 	Font::~Font()
 	{
+		delete[] glyphs;
 	}
 
 	float Font::getHeight() const
 	{
-		return (float)size;
+		return height / lineHeight;
 	}
 	
-	float Font::getWidth(const std::string & line) const
+	void Font::print(std::string text, float x, float y) const
+	{
+		print(text, x, y, 0.0f, 1.0f, 1.0f);
+	}
+	
+	void Font::print(std::string text, float x, float y, float angle, float sx, float sy) const
+	{
+		glPushMatrix();
+		
+		glTranslatef(ceil(x), ceil(y), 0.0f);
+		glRotatef(LOVE_TODEG(angle), 0, 0, 1.0f);
+		glScalef(sx, sy, 1.0f);
+		int first = (int)text[0];
+		int s = -bearingX[first];
+		for (unsigned int i = 0; i < text.size(); i++) {
+			int g = (int)text[i];
+			if (!glyphs[g]) g = 32; // space
+			glyphs[g]->draw(bearingX[g] + s, -bearingY[g]+height, 0, 1, 1, 0, 0);
+			s += spacing[g] * mSpacing;
+		}
+		glPopMatrix();
+	}
+	
+	void Font::print(char character, float x, float y) const
+	{
+		if (!glyphs[character]) character = ' ';
+		glyphs[character]->draw(x, y+height, 0, 1, 1, 0, 0);
+	}
+	
+	int Font::getWidth(const std::string & line) const
 	{
 		if(line.size() == 0) return 0;
-		float temp = 0;
+		int temp = 0;
 
-		for(unsigned int i = 0; i < line.size() - 1; i++)
+		for(unsigned int i = 0; i < line.size(); i++)
 		{
-			temp += widths[(int)line[i]] + (spacing[(int)line[i]] * mSpacing);
+			temp += (spacing[(int)line[i]] * mSpacing);
 		}
-		temp += widths[(int)line[line.size() - 1]]; // the last character's spacing isn't counted
-
+		
 		return temp;
 	}
 
-	float Font::getWidth(const char * line) const
+	int Font::getWidth(const char * line) const
 	{
 		return this->getWidth(std::string(line));
 	}
 	
-	float Font::getWidth(const char character) const
+	int Font::getWidth(const char character) const
 	{
-		return (float)widths[(int)character];
+		return spacing[(int)character];
 	}
 
 	void Font::setLineHeight(float height)

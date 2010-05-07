@@ -18,57 +18,47 @@
 * 3. This notice may not be removed or altered from any source distribution.
 **/
 
-#ifndef LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H
-#define LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H
 
-// LOVE
-#include <filesystem/File.h>
-#include <font/Rasterizer.h>
-
-// TrueType2
-#ifdef LOVE_MACOSX
-#include <freetype/ft2build.h>
-#else
-#include <ft2build.h>
-#endif
-#include <freetype/freetype.h>
-#include <freetype/ftglyph.h>
-#include <freetype/ftoutln.h>
-#include <freetype/fttrigon.h>
+#include "FontData.h"
 
 namespace love
 {
 namespace font
 {
-namespace freetype
-{
-	/**
-	* Holds data for a font object.
-	**/
-	class TrueTypeRasterizer : public Rasterizer
+	
+	FontData::FontData(Rasterizer * raster)
+		: raster(raster)
 	{
-	private:
+		data = new GlyphData *[MAX_CHARS];
+		for (unsigned int i = 0; i < MAX_CHARS; i++) {
+			data[i] = raster->getGlyphData(i);
+		}
+	}
+	
+	FontData::~FontData()
+	{
+		delete[] data;
+	}
+	
+	void * FontData::getData() const
+	{
+		return (void *)data;
+	}
 
-
-		// TrueType face
-		FT_Face face;
-
-		// File data
-		Data * data;
-		
-	public:
-		TrueTypeRasterizer(FT_Library library, Data * data, int size);
-		virtual ~TrueTypeRasterizer();
-
-		// Implement Rasterizer
-		virtual int getLineHeight() const;
-		virtual GlyphData * getGlyphData(unsigned short glyph) const;
-		virtual int getNumGlyphs() const;
-
-	}; // FreetypeRasterizer
-
-} // freetype
+	int FontData::getSize() const
+	{
+		return MAX_CHARS;
+	}
+	
+	GlyphData * FontData::getGlyphData(unsigned short glyph) const
+	{
+		return data[glyph];
+	}
+	
+	int FontData::getHeight() const
+	{
+		return raster->getHeight();
+	}
+	
 } // font
 } // love
-
-#endif // LOVE_FONT_FREETYPE_TRUE_TYPE_RASTERIZER_H
