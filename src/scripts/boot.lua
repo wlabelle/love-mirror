@@ -187,7 +187,7 @@ function love.boot()
 
 	-- This is absolutely needed.
 	require("love")
-	require("love.filesystem")
+	require("love.filesystem.physfs")
 
 	love.arg.parse_options()
 
@@ -246,6 +246,7 @@ function love.init()
 		},
 		console = false, -- Only relevant for windows.
 		identity = false,
+		release = false,
 	}
 
 	-- If config file exists, load it and allow it to update config table.
@@ -263,14 +264,40 @@ function love.init()
 		end
 	end
 
+	if c.release then
+		love._release = {
+			title = c.title ~= "Untitled" and c.title or nil,
+			author = c.author ~= "Unnamed" and c.author or nil
+		}
+	end
+
 	if love.arg.options.console.set then
 		c.console = true
 	end
 
+	local defaultmodules = {
+		audio = false,
+		event = "sdl",
+		filesystem = "physfs",
+		font = "freetype",
+		graphics = "opengl",
+		image = false,
+		joystick = "sdl",
+		keyboard = "sdl",
+		mouse = "sdl",
+		physics = "box2d",
+		sound = false,
+		timer = "sdl",
+		thread = "sdl"
+	}
+
 	-- Gets desired modules.
 	for k,v in pairs(c.modules) do
 		if v then
-			require("love." .. k)
+			if type(v) ~= "string" then
+				v = defaultmodules[k]
+			end
+			require((v and "love.%s.%s" or "love.%s"):format(k, v))
 		end
 	end
 
@@ -877,6 +904,54 @@ function love.errhand(msg)
 
 end
 
+function love.releaseerrhand(msg)
+	print("An error has occured, the game has been stopped.")
+
+	if not love.graphics or not love.event or not love.graphics.isCreated() then
+		return
+	end
+
+	love.graphics.setRenderTarget()
+
+	-- Load.
+	love.graphics.setScissor()
+	love.graphics.setBlendMode("alpha")
+	love.graphics.setBackgroundColor(89, 157, 220)
+	local font = love.graphics.newFont(14)
+	love.graphics.setFont(font)
+
+	love.graphics.setColor(255, 255, 255, 255)
+
+	love.graphics.clear()
+
+	local err = {}
+
+	p = string.format("An error has occured that caused %s to stop\nyou can notify %s about this.", love._release.title or "this game", love._release.author or "the author")
+
+	local function draw()
+		love.graphics.clear()
+		love.graphics.printf(p, 70, 70, love.graphics.getWidth() - 70)
+		love.graphics.present()
+	end
+
+	draw()
+
+	local e, a, b, c
+	while true do
+		e, a, b, c = love.event.wait()
+
+		if e == "q" then
+			return
+		end
+		if e == "kp" and a == "escape" then
+			return
+		end
+
+		draw()
+
+	end
+end
+
 
 -----------------------------------------------------------
 -- The root of all calls.
@@ -886,5 +961,5 @@ local result = xpcall(love.boot, error_printer)
 if not result then return end
 local result = xpcall(love.init, love.errhand)
 if not result then return end
-local result = xpcall(love.run, love.errhand)
+local result = xpcall(love.run, love._release and love.releaseerrhand or love.errhand)
 if not result then return end
