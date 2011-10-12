@@ -18,29 +18,19 @@
 * 3. This notice may not be removed or altered from any source distribution.
 **/
 
-// LOVE
-#include "MemoryData.h"
+#include "Quad.h"
 
 namespace love
-{	
-	MemoryData::MemoryData(void * data, int size)
-		: data(data), size(size)
+{
+namespace graphics
+{
+	Quad::Quad()
 	{
 	}
 
-	MemoryData::~MemoryData()
+	Quad::~Quad()
 	{
-		// Memory should be static.
 	}
 
-	void * MemoryData::getData() const
-	{
-		return data;
-	}
-
-	int MemoryData::getSize() const
-	{
-		return size;
-	}
-
+} // graphics
 } // love

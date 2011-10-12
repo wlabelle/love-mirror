@@ -23,8 +23,7 @@
 
 // LOVE
 #include <common/Data.h>
-
-#include "EncodedImageData.h"
+#include <filesystem/File.h>
 
 namespace love
 {	
@@ -43,11 +42,24 @@ namespace image
 	class ImageData : public Data
 	{
 	public:
+		
+		enum Format
+		{
+			FORMAT_TGA = 1,
+			FORMAT_BMP,
+			FORMAT_GIF,
+			FORMAT_JPG,
+			FORMAT_PNG,
+			FORMAT_MAX_ENUM
+		};
 
 		/**
 		* Destructor.
 		**/
 		virtual ~ImageData(){};
+		
+		static bool getConstant(const char * in, Format & out);
+		static bool getConstant(Format in, const char *& out);
 
 		/**
 		* Paste part of one ImageData onto another. The subregion defined by the top-left
@@ -95,14 +107,18 @@ namespace image
 		* @param y The location along the y-axis.
 		* @return The color for the given location.
 		**/
-		virtual pixel getPixel(int x, int y) const = 0;
+		virtual pixel getPixel(int x, int y) = 0;
 		
 		/**
 		 * Encodes raw pixel data into a given format.
 		 * @param f The format to convert to.
 		 * @return A pointer to the encoded image data.
 		 **/
-		virtual EncodedImageData * encode(EncodedImageData::Format f) = 0;
+		virtual void encode(love::filesystem::File * f, Format format) = 0;
+		
+	private:
+		static StringMap<Format, FORMAT_MAX_ENUM>::Entry formatEntries[];
+		static StringMap<Format, FORMAT_MAX_ENUM> formats;
 
 	}; // ImageData
 

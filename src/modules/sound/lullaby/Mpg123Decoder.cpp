@@ -129,6 +129,7 @@ namespace lullaby
 				continue;
 			case MPG123_NEED_MORE:
 				{
+					size += numbytes;
 					int v = feed(8192);
 
 					switch(v)
@@ -163,12 +164,12 @@ namespace lullaby
 
 	bool Mpg123Decoder::seek(float s)
 	{
-		off_t offset = mpg123_timeframe(handle, s);
+		off_t offset = static_cast<off_t>(s * static_cast<float>(sampleRate));
 
 		if(offset < 0)
 			return false;
 
-		if(mpg123_feedseek(handle, 0, SEEK_SET, &offset) >= 0)
+		if(mpg123_feedseek(handle, offset, SEEK_SET, &offset) >= 0)
 		{
 			data_offset = offset;
 			eof = false;

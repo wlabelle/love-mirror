@@ -513,7 +513,7 @@ namespace box2d
 		p->own = false;
 
 		Body * t = (Body *)p->data;
-		t->release();
+		t->destroy();
 
 		return 0;
 	}

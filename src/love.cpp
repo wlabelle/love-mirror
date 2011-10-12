@@ -22,7 +22,6 @@
 #include <common/config.h>
 #include <common/version.h>
 #include <common/runtime.h>
-#include <common/MemoryData.h>
 
 #ifdef LOVE_WINDOWS
 #include <windows.h>
@@ -53,7 +52,7 @@
 #include <physics/box2d/wrap_Physics.h>
 #include <sound/wrap_Sound.h>
 #include <timer/sdl/wrap_Timer.h>
-#include <thread/sdl/wrap_Thread.h>
+#include <thread/wrap_Thread.h>
 
 // Libraries.
 #include "libraries/luasocket/luasocket.h"
@@ -67,18 +66,18 @@
 
 static const luaL_Reg modules[] = {
 	{ "love.audio", love::audio::luaopen_love_audio },
-	{ "love.event.sdl", love::event::sdl::luaopen_love_event },
-	{ "love.filesystem.physfs", love::filesystem::physfs::luaopen_love_filesystem },
-	{ "love.font.freetype", love::font::freetype::luaopen_love_font },
-	{ "love.graphics.opengl", love::graphics::opengl::luaopen_love_graphics },
+	{ "love.event", love::event::sdl::luaopen_love_event },
+	{ "love.filesystem", love::filesystem::physfs::luaopen_love_filesystem },
+	{ "love.font", love::font::freetype::luaopen_love_font },
+	{ "love.graphics", love::graphics::opengl::luaopen_love_graphics },
 	{ "love.image", love::image::luaopen_love_image },
-	{ "love.joystick.sdl", love::joystick::sdl::luaopen_love_joystick },
-	{ "love.keyboard.sdl", love::keyboard::sdl::luaopen_love_keyboard },
-	{ "love.mouse.sdl", love::mouse::sdl::luaopen_love_mouse },
-	{ "love.physics.box2d", love::physics::box2d::luaopen_love_physics },
+	{ "love.joystick", love::joystick::sdl::luaopen_love_joystick },
+	{ "love.keyboard", love::keyboard::sdl::luaopen_love_keyboard },
+	{ "love.mouse", love::mouse::sdl::luaopen_love_mouse },
+	{ "love.physics", love::physics::box2d::luaopen_love_physics },
 	{ "love.sound", love::sound::luaopen_love_sound },
-	{ "love.timer.sdl", love::timer::sdl::luaopen_love_timer },
-	{ "love.thread.sdl", love::thread::sdl::luaopen_love_thread },
+	{ "love.timer", love::timer::sdl::luaopen_love_timer },
+	{ "love.thread", love::thread::luaopen_love_thread },
 	{ 0, 0 }
 };
 
@@ -93,11 +92,15 @@ extern "C" LOVE_EXPORT int luaopen_love(lua_State * L)
 	love::luax_insistglobal(L, "love");
 
 	// Set version information.
-	lua_pushinteger(L, love::VERSION);
+	lua_pushstring(L, love::VERSION);
 	lua_setfield(L, -2, "_version");
 
-	lua_pushstring(L, love::VERSION_STR);
-	lua_setfield(L, -2, "_version_string");
+	lua_pushnumber(L, love::VERSION_MAJOR);
+	lua_setfield(L, -2, "_version_major");
+	lua_pushnumber(L, love::VERSION_MINOR);
+	lua_setfield(L, -2, "_version_minor");
+	lua_pushnumber(L, love::VERSION_REV);
+	lua_setfield(L, -2, "_version_revision");
 
 	lua_pushstring(L, love::VERSION_CODENAME);
 	lua_setfield(L, -2, "_version_codename");
@@ -111,7 +114,7 @@ extern "C" LOVE_EXPORT int luaopen_love(lua_State * L)
 
 	for(int i = 0; love::VERSION_COMPATIBILITY[i] != 0; ++i)
 	{
-		lua_pushinteger(L, love::VERSION_COMPATIBILITY[i]);
+		lua_pushstring(L, love::VERSION_COMPATIBILITY[i]);
 		lua_rawseti(L, -2, i+1);
 	}
 
@@ -240,7 +243,7 @@ int main(int argc, char ** argv)
 
 	// Oh, you just want the version? Okay!
 	if(argc > 1 && strcmp(argv[1],"--version") == 0) {
-		printf("LOVE %s (%s)\n", love::VERSION_STR, love::VERSION_CODENAME);
+		printf("LOVE %s (%s)\n", love::VERSION, love::VERSION_CODENAME);
 		return 0;
 	}
 

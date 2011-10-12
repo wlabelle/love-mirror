@@ -27,9 +27,6 @@
 #include <iostream>
 #include <cmath>
 
-// SDL
-#include <SDL.h>
-
 // LOVE
 #include <audio/Audio.h>
 #include <common/config.h>
@@ -37,6 +34,7 @@
 
 #include "Source.h"
 #include "Pool.h"
+#include <thread/threads.h>
 
 // OpenAL
 #ifdef LOVE_MACOSX
@@ -66,17 +64,30 @@ namespace openal
 		// The OpenAL context.
 		ALCcontext * context;
 
-		SDL_Thread * thread;
-
 		// The Pool.
 		Pool * pool;
 
-		// Set this to true when the thread should finish.
-		// Main thread will write to this value, and Audio::run
-		// will read from it.
-		bool finish;
 
-		static int run(void * unused);
+		class PoolThread: public thread::ThreadBase {
+		protected:
+			Pool* pool;
+
+			// Set this to true when the thread should finish.
+			// Main thread will write to this value, and PoolThread
+			// will read from it.
+			volatile bool finish;
+
+			// finish lock
+			thread::Mutex mutex;
+
+			virtual void main();
+
+		public:
+			PoolThread(Pool* pool);
+			void setFinish();
+		};
+
+		PoolThread* poolThread;
 
 	public:
 

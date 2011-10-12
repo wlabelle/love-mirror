@@ -108,8 +108,8 @@ namespace sdl
 			return 4;
 		case Event::TYPE_JOYSTICK_PRESSED:
 		case Event::TYPE_JOYSTICK_RELEASED:
-			lua_pushinteger(L, msg.joystick.index);
-			lua_pushinteger(L, msg.joystick.button);
+			lua_pushinteger(L, msg.joystick.index+1);
+			lua_pushinteger(L, msg.joystick.button+1);
 			return 3;
 		case Event::TYPE_FOCUS:
 			lua_pushboolean(L, msg.focus.f);
@@ -177,12 +177,28 @@ namespace sdl
 		return 1;
 	}
 
+	int w_clear(lua_State *)
+	{
+		instance->clear();
+		return 0;
+	}
+
+	int w_quit(lua_State * L)
+	{
+		static Event::Message m;
+		m.type = Event::TYPE_QUIT;
+		luax_pushboolean(L, instance->push(m));
+		return 1;
+	}
+
 	// List of functions to wrap.
 	static const luaL_Reg functions[] = {
 		{ "pump", w_pump },
 		{ "poll", w_poll },
 		{ "wait", w_wait },
 		{ "push", w_push },
+		{ "clear", w_clear },
+		{ "quit", w_quit },
 		{ 0, 0 }
 	};
 

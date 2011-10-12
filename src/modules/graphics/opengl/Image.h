@@ -27,11 +27,9 @@
 #include <common/config.h>
 #include <image/ImageData.h>
 #include <graphics/Image.h>
-#include "Quad.h"
 
 // OpenGL
 #include "GLee.h"
-#include <SDL/SDL_opengl.h>
 
 namespace love
 {
@@ -68,6 +66,9 @@ namespace opengl
 			Image::Filter filter;
 			Image::Wrap wrap;
 		} settings;
+
+		bool loadVolatilePOT();
+		bool loadVolatileNPOT();
 
 	public:
 
@@ -108,22 +109,19 @@ namespace opengl
 		/**
 		* @copydoc Drawable::draw()
 		**/
-		void draw(float x, float y, float angle, float sx, float sy, float ox, float oy) const;
+		void draw(float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const;
 
 		/**
-		* This function draws a section of the image using a Quad object.
-		*
-		* @copydetails Image::draws()
-		* @param frame Represents the region of the Image to draw.
+		* @copydoc DrawQable::drawq()
 		**/
-		void drawq(Quad * quad, float x, float y, float angle, float sx, float sy, float ox, float oy) const;
+		void drawq(love::graphics::Quad * quad, float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const;
 
 		/**
 		* Sets the filter mode.
 		*
 		* @param mode The filter mode.
 		**/
-		void setFilter(Image::Filter f);
+		void setFilter(const Image::Filter& f);
 
 		Image::Filter getFilter() const;
 
@@ -143,6 +141,9 @@ namespace opengl
 	private:
 
 		void drawv(const Matrix & t, const vertex * v) const;
+
+		friend class PixelEffect;
+		GLuint getTextureName() const { return texture; }
 
 	}; // Image
 

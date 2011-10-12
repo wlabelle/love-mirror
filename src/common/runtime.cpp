@@ -25,17 +25,15 @@
 #include "Object.h"
 #include "Reference.h"
 #include "StringMap.h"
+#include <thread/threads.h>
 
 // STD
 #include <iostream>
 
-// SDL
-#include <SDL_mutex.h>
-#include <SDL_thread.h>
 
 namespace love
 {
-	static SDL_mutex *gcmutex = 0;
+	static thread::Mutex *gcmutex = 0;
 	void *_gcmutex = 0;
 	unsigned int _gcthread = 0;
 	/**
@@ -46,17 +44,16 @@ namespace love
 	{
 		if (!gcmutex)
 		{
-			gcmutex = SDL_CreateMutex();
+			gcmutex = new thread::Mutex();
 			_gcmutex = (void*) gcmutex;
 		}
 		Proxy * p = (Proxy *)lua_touserdata(L, 1);
 		Object * t = (Object *)p->data;
 		if(p->own)
 		{
-			SDL_mutexP(gcmutex);
-			_gcthread = (unsigned int) SDL_ThreadID();
+			thread::Lock lock(gcmutex);
+			_gcthread = thread::ThreadBase::threadId();
 			t->release();
-			SDL_mutexV(gcmutex);
 		}
 		return 0;
 	}
@@ -230,8 +227,32 @@ namespace love
 		lua_pop(L, 1); // Pops metatable.
 		return 0;
 	}
+	
+	int luax_table_insert(lua_State * L, int tindex, int vindex, int pos)
+	{
+		if (tindex < 0)
+			tindex = lua_gettop(L)+1+tindex;
+		if (vindex < 0)
+			vindex = lua_gettop(L)+1+vindex;
+		if (pos == -1)
+		{
+			lua_pushvalue(L, vindex);
+			lua_rawseti(L, tindex, lua_objlen(L, tindex)+1);
+			return 0;
+		}
+		else if (pos < 0)
+			pos = lua_objlen(L, tindex)+1+pos;
+		for (int i = lua_objlen(L, tindex)+1; i > pos; i--)
+		{
+			lua_rawgeti(L, tindex, i-1);
+			lua_rawseti(L, tindex, i);
+		}
+		lua_pushvalue(L, vindex);
+		lua_rawseti(L, tindex, pos);
+		return 0;
+	}
 
-	int luax_register_searcher(lua_State * L, lua_CFunction f)
+	int luax_register_searcher(lua_State * L, lua_CFunction f, int pos)
 	{
 		// Add the package loader to the package.loaders table.
 		lua_getglobal(L, "package");
@@ -244,11 +265,9 @@ namespace love
 		if(lua_isnil(L, -1))
 			return luaL_error(L, "Can't register searcher: package.loaders table does not exist.");
 
-		int len = lua_objlen(L, -1);
-		lua_pushinteger(L, len+1);
 		lua_pushcfunction(L, f);
-		lua_settable(L, -3);
-		lua_pop(L, 2);
+		luax_table_insert(L, -2, -1, pos);
+		lua_pop(L, 3);
 		return 0;
 	}
 
@@ -393,15 +412,13 @@ namespace love
 		{"Drawable", GRAPHICS_DRAWABLE_ID},
 		{"Image", GRAPHICS_IMAGE_ID},
 		{"Quad", GRAPHICS_QUAD_ID},
-		{"Glyph", GRAPHICS_GLYPH_ID},
 		{"Font", GRAPHICS_FONT_ID},
 		{"ParticleSystem", GRAPHICS_PARTICLE_SYSTEM_ID},
 		{"SpriteBatch", GRAPHICS_SPRITE_BATCH_ID},
-		{"VertexBuffer", GRAPHICS_VERTEX_BUFFER_ID},
+		{"Canvas", GRAPHICS_CANVAS_ID},
 
 		// Image
 		{"ImageData", IMAGE_IMAGE_DATA_ID},
-		{"EncodedImageData", IMAGE_ENCODED_IMAGE_DATA_ID},
 
 		// Audio
 		{"Source", AUDIO_SOURCE_ID},

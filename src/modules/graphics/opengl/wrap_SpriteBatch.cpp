@@ -41,7 +41,9 @@ namespace opengl
 		float sy = (float)luaL_optnumber(L, 6, sx);
 		float ox = (float)luaL_optnumber(L, 7, 0);
 		float oy = (float)luaL_optnumber(L, 8, 0);
-		t->add(x, y, angle, sx, sy, ox, oy);
+		float kx = (float)luaL_optnumber(L, 10, 0);
+		float ky = (float)luaL_optnumber(L, 11, 0);
+		t->add(x, y, angle, sx, sy, ox, oy, kx, ky);
 		return 0;
 	}
 
@@ -56,7 +58,9 @@ namespace opengl
 		float sy = (float)luaL_optnumber(L, 7, sx);
 		float ox = (float)luaL_optnumber(L, 8, 0);
 		float oy = (float)luaL_optnumber(L, 9, 0);
-		t->addq(q, x, y, angle, sx, sy, ox, oy);
+		float kx = (float)luaL_optnumber(L, 10, 0);
+		float ky = (float)luaL_optnumber(L, 11, 0);
+		t->addq(q, x, y, angle, sx, sy, ox, oy, kx, ky);
 		return 0;
 	}
 
@@ -67,17 +71,44 @@ namespace opengl
 		return 0;
 	}
 
-	int w_SpriteBatch_lock(lua_State * L)
+	int w_SpriteBatch_bind(lua_State * L)
 	{
 		SpriteBatch * t = luax_checkspritebatch(L, 1);
-		lua_pushlightuserdata(L, t->lock());
-		return 1;
+		t->lock();
+		return 0;
 	}
 
-	int w_SpriteBatch_unlock(lua_State * L)
+	int w_SpriteBatch_unbind(lua_State * L)
 	{
 		SpriteBatch * t = luax_checkspritebatch(L, 1);
 		t->unlock();
+		return 0;
+	}
+
+	int w_SpriteBatch_setImage(lua_State * L)
+	{
+		SpriteBatch * t = luax_checkspritebatch(L, 1);
+		Image * image = luax_checktype<Image>(L, 2, "Image", GRAPHICS_IMAGE_T);
+		t->setImage(image);
+		return 0;
+	}
+
+	int w_SpriteBatch_setColor(lua_State * L)
+	{
+		SpriteBatch * t = luax_checkspritebatch(L, 1);
+
+		if (lua_gettop(L) <= 1)
+			t->setColor();
+		else
+		{
+			Color c;
+			c.r = (unsigned char)luaL_checkint(L, 2);
+			c.g = (unsigned char)luaL_checkint(L, 3);
+			c.b = (unsigned char)luaL_checkint(L, 4);
+			c.a = (unsigned char)luaL_optint(L, 5, 255);
+			t->setColor(c);
+		}
+
 		return 0;
 	}
 
@@ -85,8 +116,10 @@ namespace opengl
 		{ "add", w_SpriteBatch_add },
 		{ "addq", w_SpriteBatch_addq },
 		{ "clear", w_SpriteBatch_clear },
-		{ "lock", w_SpriteBatch_lock },
-		{ "unlock", w_SpriteBatch_unlock },
+		{ "bind", w_SpriteBatch_bind },
+		{ "unbind", w_SpriteBatch_unbind },
+		{ "setImage", w_SpriteBatch_setImage },
+		{ "setColor", w_SpriteBatch_setColor },
 		{ 0, 0 }
 	};
 

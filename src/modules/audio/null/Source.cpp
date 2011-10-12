@@ -77,8 +77,9 @@ namespace null
 		return true;
 	}
 
-	void Source::update()
+	bool Source::update()
 	{
+		return false;
 	}
 
 	void Source::setPitch(float pitch)
@@ -99,6 +100,15 @@ namespace null
 	float Source::getVolume() const
 	{
 		return volume;
+	}
+	
+	void Source::seek(float, Source::Unit)
+	{
+	}
+	
+	float Source::tell(Source::Unit)
+	{
+		return 0.0f;
 	}
 
 	void Source::setPosition(float *)

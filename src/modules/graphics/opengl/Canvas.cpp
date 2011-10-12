@@ -1,4 +1,4 @@
-#include "Framebuffer.h"
+#include "Canvas.h"
 #include "Graphics.h"
 #include <common/Matrix.h>
 
@@ -14,39 +14,46 @@ namespace opengl
 	// strategy for fbo creation, interchangable at runtime:
 	// none, opengl >= 3.0, extensions
 	struct FramebufferStrategy {
-		/// create a new framebuffer, depthbuffer and texture
+		/// create a new framebuffer, depth_stencil and texture
 		/**
-		 * @param[out] framebuffer Framebuffer name
-		 * @param[out] depthbuffer Depthbuffer name
-		 * @param[out] img         Texture name
-		 * @param[in]  width       Width of framebuffer
-		 * @param[in]  height      Height of framebuffer
+		 * @param[out] framebuffer   Framebuffer name
+		 * @param[out] depth_stencil Name for packed depth and stencil buffer
+		 * @param[out] img           Texture name
+		 * @param[in]  width         Width of framebuffer
+		 * @param[in]  height        Height of framebuffer
 		 * @return Creation status
 		 */
 		virtual GLenum createFBO(GLuint&, GLuint&, GLuint&, int, int)
 		{ return GL_FRAMEBUFFER_UNSUPPORTED; }
 		/// remove objects
 		/**
-		 * @param[in] framebuffer Framebuffer name
-		 * @param[in] depthbuffer Depthbuffer name
-		 * @param[in] img         Texture name
+		 * @param[in] framebuffer   Framebuffer name
+		 * @param[in] depth_stencil Name for packed depth and stencil buffer
+		 * @param[in] img           Texture name
 		 */
 		virtual void deleteFBO(GLuint, GLuint, GLuint) {}
 		virtual void bindFBO(GLuint) {}
 	};
 
 	struct FramebufferStrategyGL3 : public FramebufferStrategy {
-		virtual GLenum createFBO(GLuint& framebuffer, GLuint& depthbuffer, GLuint& img, int width, int height)
+		virtual GLenum createFBO(GLuint& framebuffer, GLuint& depth_stencil,  GLuint& img, int width, int height)
 		{
 			// get currently bound fbo to reset to it later
 			GLint current_fbo;
 			glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
 
-			// generate depth buffer
-			glGenRenderbuffers(1, &depthbuffer);
-			glBindRenderbuffer(GL_RENDERBUFFER, depthbuffer);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
+			// create framebuffer
+			glGenFramebuffers(1, &framebuffer);
+			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+			// create stencil buffer
+			glGenRenderbuffers(1, &depth_stencil);
+			glBindRenderbuffer(GL_RENDERBUFFER, depth_stencil);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_STENCIL, width, height);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
+					GL_RENDERBUFFER, depth_stencil);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+					GL_RENDERBUFFER, depth_stencil);
 
 			// generate texture save target
 			glGenTextures(1, &img);
@@ -56,24 +63,21 @@ namespace opengl
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height,
 					0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 			glBindTexture(GL_TEXTURE_2D, 0);
-
-			// create framebuffer
-			glGenFramebuffers(1, &framebuffer);
-			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
 					GL_TEXTURE_2D, img, 0);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-					GL_RENDERBUFFER, depthbuffer);
+
+			// check status
 			GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
 			// unbind framebuffer
+			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 			glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)current_fbo);
 			return status;
 		}
-		virtual void deleteFBO(GLuint framebuffer, GLuint depthbuffer, GLuint img)
+		virtual void deleteFBO(GLuint framebuffer, GLuint depth_stencil,  GLuint img)
 		{
 			glDeleteTextures(1, &img);
-			glDeleteRenderbuffers(1, &depthbuffer);
+			glDeleteRenderbuffers(1, &depth_stencil);
 			glDeleteFramebuffers(1, &framebuffer);
 		}
 
@@ -85,16 +89,23 @@ namespace opengl
 
 	struct FramebufferStrategyEXT : public FramebufferStrategy {
 
-		virtual GLenum createFBO(GLuint& framebuffer, GLuint& depthbuffer, GLuint& img, int width, int height)
+		virtual GLenum createFBO(GLuint& framebuffer, GLuint& depth_stencil, GLuint& img, int width, int height)
 		{
 			GLint current_fbo;
 			glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &current_fbo);
 
-			// generate depth buffer
-			glGenRenderbuffersEXT(1, &depthbuffer);
-			glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, depthbuffer);
-			glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_DEPTH_COMPONENT16, width, height);
-			glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
+			// create framebuffer
+			glGenFramebuffersEXT(1, &framebuffer);
+			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, framebuffer);
+
+			// create stencil buffer
+			glGenRenderbuffersEXT(1, &depth_stencil);
+			glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, depth_stencil);
+			glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_DEPTH_STENCIL_EXT, width, height);
+			glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT,
+					GL_RENDERBUFFER_EXT, depth_stencil);
+			glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
+					GL_RENDERBUFFER_EXT, depth_stencil);
 
 			// generate texture save target
 			glGenTextures(1, &img);
@@ -104,25 +115,22 @@ namespace opengl
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height,
 					0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 			glBindTexture(GL_TEXTURE_2D, 0);
-
-			// create framebuffer
-			glGenFramebuffersEXT(1, &framebuffer);
-			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, framebuffer);
 			glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
 					GL_TEXTURE_2D, img, 0);
-			glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
-					GL_RENDERBUFFER_EXT, depthbuffer);
+
+			// check status
 			GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
 
 			// unbind framebuffer
+			glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
 			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, (GLuint)current_fbo);
 			return status;
 		}
 
-		virtual void deleteFBO(GLuint framebuffer, GLuint depthbuffer, GLuint img)
+		virtual void deleteFBO(GLuint framebuffer, GLuint depth_stencil, GLuint img)
 		{
 			glDeleteTextures(1, &img);
-			glDeleteRenderbuffersEXT(1, &depthbuffer);
+			glDeleteRenderbuffersEXT(1, &depth_stencil);
 			glDeleteFramebuffersEXT(1, &framebuffer);
 		}
 
@@ -132,7 +140,7 @@ namespace opengl
 		}
 	};
 	
-	FramebufferStrategy* strategy;
+	FramebufferStrategy* strategy = NULL;
 	
 	FramebufferStrategy strategyNone;
 	
@@ -140,13 +148,23 @@ namespace opengl
 	
 	FramebufferStrategyEXT strategyEXT;
 	
-	Framebuffer* Framebuffer::current = NULL;
+	Canvas* Canvas::current = NULL;
 
-	Framebuffer::Framebuffer(int width, int height) :
+	static void loadStrategy()
+	{
+		if (!strategy) {
+			if (GLEE_VERSION_3_0 || GLEE_ARB_framebuffer_object)
+				strategy = &strategyGL3;
+			else if (GLEE_EXT_framebuffer_object && GLEE_EXT_packed_depth_stencil)
+				strategy = &strategyEXT;
+			else
+				strategy = &strategyNone;
+		}
+	}
+
+	Canvas::Canvas(int width, int height) :
 		width(width), height(height)
 	{
-		strategy = NULL;
-
 		float w = static_cast<float>(width);
 		float h = static_cast<float>(height);
 
@@ -157,24 +175,17 @@ namespace opengl
 		vertices[3].x = w; vertices[3].y = 0;
 
 		// texture coordinates
-		vertices[0].s = 0;     vertices[0].t = 1;
-		vertices[1].s = 0;     vertices[1].t = 0;
-		vertices[2].s = 1;     vertices[2].t = 0;
-		vertices[3].s = 1;     vertices[3].t = 1;
+		vertices[0].s = 0;     vertices[0].t = 0;
+		vertices[1].s = 0;     vertices[1].t = 1;
+		vertices[2].s = 1;     vertices[2].t = 1;
+		vertices[3].s = 1;     vertices[3].t = 0;
 
-		if (!strategy) {
-			if (GLEE_VERSION_3_0 || GLEE_ARB_framebuffer_object)
-				strategy = &strategyGL3;
-			else if (GLEE_EXT_framebuffer_object)
-				strategy = &strategyEXT;
-			else
-				strategy = &strategyNone;
-		}
+		loadStrategy();
 
 		loadVolatile();
 	}
 
-	Framebuffer::~Framebuffer()
+	Canvas::~Canvas()
 	{
 		// reset framebuffer if still using this one
 		if (current == this)
@@ -183,13 +194,19 @@ namespace opengl
 		unloadVolatile();
 	}
 
-	void Framebuffer::bindDefaultBuffer()
+	bool Canvas::isSupported()
+	{
+		loadStrategy();
+		return (strategy != &strategyNone);
+	}
+
+	void Canvas::bindDefaultCanvas()
 	{
 		if (current != NULL)
 			current->stopGrab();
 	}
 
-	void Framebuffer::startGrab()
+	void Canvas::startGrab()
 	{
 		// already grabbing
 		if (current == this)
@@ -200,9 +217,8 @@ namespace opengl
 			current->stopGrab();
 
 		// bind buffer and clear screen
-		glPushAttrib(GL_VIEWPORT_BIT | GL_DEPTH_BUFFER_BIT | GL_TRANSFORM_BIT);
+		glPushAttrib(GL_VIEWPORT_BIT | GL_TRANSFORM_BIT);
 		strategy->bindFBO(fbo);
-		glClear(GL_DEPTH_BUFFER_BIT);
 		glViewport(0, 0, width, height);
 		
 		// Reset the projection matrix
@@ -210,8 +226,8 @@ namespace opengl
 		glPushMatrix();
 		glLoadIdentity();
 		
-		// Set up orthographic view (no depth)
-		glOrtho(0.0, width, height, 0.0, -1.0, 1.0);
+		// Set up upside-down orthographic view (no depth)
+		glOrtho(0.0, width, 0.0, height, -1.0, 1.0);
 		
 		// Switch back to modelview matrix
 		glMatrixMode(GL_MODELVIEW);
@@ -220,7 +236,7 @@ namespace opengl
 		current = this;
 	}
 
-	void Framebuffer::stopGrab()
+	void Canvas::stopGrab()
 	{
 		// i am not grabbing. leave me alone
 		if (current != this)
@@ -235,7 +251,7 @@ namespace opengl
 	}
 
 
-	void Framebuffer::clear(const Color& c)
+	void Canvas::clear(const Color& c)
 	{
 		GLuint previous = 0;
 		if (current != NULL)
@@ -244,42 +260,32 @@ namespace opengl
 		strategy->bindFBO(fbo);
 		glPushAttrib(GL_COLOR_BUFFER_BIT);
 		glClearColor((float)c.r/255.0f, (float)c.g/255.0f, (float)c.b/255.0f, (float)c.a/255.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glPopAttrib();
 
 		strategy->bindFBO(previous);
 	}
 
-	void Framebuffer::draw(float x, float y, float angle, float sx, float sy, float ox, float oy) const
+	void Canvas::draw(float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const
 	{
 		static Matrix t;
-		t.setTransformation(x, y, angle, sx, sy, ox, oy);
+		t.setTransformation(x, y, angle, sx, sy, ox, oy, kx, ky);
 
-		glPushMatrix();
-		glMultMatrixf((const GLfloat*)t.getElements());
+		drawv(t, vertices);
+	}
+	
+	void Canvas::drawq(love::graphics::Quad * quad, float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const
+	{
+		static Matrix t;
+		const vertex * v = quad->getVertices();
 
-		glBindTexture(GL_TEXTURE_2D, img);
-
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-		glVertexPointer(2, GL_FLOAT, sizeof(vertex), (GLvoid*)&vertices[0].x);
-		glTexCoordPointer(2, GL_FLOAT, sizeof(vertex), (GLvoid*)&vertices[0].s);
-		glDrawArrays(GL_QUADS, 0, 4);
-		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-		glDisableClientState(GL_VERTEX_ARRAY);
-
-		glPopMatrix();
+		t.setTransformation(x, y, angle, sx, sy, ox, oy, kx, ky);
+		drawv(t, v);
 	}
 
-	love::image::ImageData * Framebuffer::getImageData(love::image::Image * image)
+	love::image::ImageData * Canvas::getImageData(love::image::Image * image)
 	{
-		int row = 4 * width;
-		int size = row * height;
-
-		// see Graphics::newScreenshot. OpenGL reads from lower-left,
-		// but we need the pixels from upper-left.
-		GLubyte* pixels = new GLubyte[size];
-		GLubyte* screenshot = new GLubyte[size];
+		GLubyte * pixels = new GLubyte[4*width*height];
 
 		strategy->bindFBO( fbo );
 		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
@@ -288,21 +294,14 @@ namespace opengl
 		else
 			strategy->bindFBO( 0 );
 
-		GLubyte* src = pixels - row; // second line of buffer
-		GLubyte* dst = screenshot + size; // end of buffer
-
-		for (int i = 0; i < height; ++i)
-			memcpy(dst -= row, src += row, row);
-
-		love::image::ImageData * img = image->newImageData(width, height, (void*)screenshot);
-
-		delete[] screenshot;
+		love::image::ImageData * img = image->newImageData(width, height, (void*)pixels);
+		
 		delete[] pixels;
 
 		return img;
 	}
 
-	void Framebuffer::setFilter(const Image::Filter &f)
+	void Canvas::setFilter(const Image::Filter &f)
 	{
 		GLint gmin = (f.min == Image::FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
 		GLint gmag = (f.mag == Image::FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
@@ -313,7 +312,7 @@ namespace opengl
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gmag);
 	}
 
-	Image::Filter Framebuffer::getFilter() const
+	Image::Filter Canvas::getFilter() const
 	{
 		GLint gmin, gmag;
 
@@ -327,7 +326,7 @@ namespace opengl
 		return f;
 	}
 
-	void Framebuffer::setWrap(const Image::Wrap &w)
+	void Canvas::setWrap(const Image::Wrap &w)
 	{
 		GLint wrap_s = (w.s == Image::WRAP_CLAMP) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
 		GLint wrap_t = (w.t == Image::WRAP_CLAMP) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
@@ -337,7 +336,7 @@ namespace opengl
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t);
 	}
 
-	Image::Wrap Framebuffer::getWrap() const
+	Image::Wrap Canvas::getWrap() const
 	{
 		GLint wrap_s, wrap_t;
 		glBindTexture(GL_TEXTURE_2D, img);
@@ -351,9 +350,9 @@ namespace opengl
 		return w;
 	}
 
-	bool Framebuffer::loadVolatile()
+	bool Canvas::loadVolatile()
 	{
-		status = strategy->createFBO(fbo, depthbuffer, img, width, height);
+		status = strategy->createFBO(fbo, depth_stencil, img, width, height);
 		if (status != GL_FRAMEBUFFER_COMPLETE)
 			return false;
 
@@ -365,11 +364,40 @@ namespace opengl
 		return true;
 	}
 	
-	void Framebuffer::unloadVolatile()
+	void Canvas::unloadVolatile()
 	{
 		settings.filter = getFilter();
 		settings.wrap   = getWrap();
-		strategy->deleteFBO(fbo, depthbuffer, img);
+		strategy->deleteFBO(fbo, depth_stencil, img);
+	}
+
+	int Canvas::getWidth()
+	{
+		return width;
+	}
+
+	int Canvas::getHeight()
+	{
+		return height;
+	}
+	
+	void Canvas::drawv(const Matrix & t, const vertex * v) const
+	{
+		glPushMatrix();
+		
+		glMultMatrixf((const GLfloat*)t.getElements());
+		
+		glBindTexture(GL_TEXTURE_2D, img);
+		
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glVertexPointer(2, GL_FLOAT, sizeof(vertex), (GLvoid*)&v[0].x);
+		glTexCoordPointer(2, GL_FLOAT, sizeof(vertex), (GLvoid*)&v[0].s);
+		glDrawArrays(GL_QUADS, 0, 4);
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		glDisableClientState(GL_VERTEX_ARRAY);
+		
+		glPopMatrix();
 	}
 
 } // opengl

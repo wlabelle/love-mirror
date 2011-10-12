@@ -18,24 +18,29 @@
 * 3. This notice may not be removed or altered from any source distribution.
 **/
 
-#ifndef LOVE_THREAD_THREAD_H
-#define LOVE_THREAD_THREAD_H
+#include "threads.h"
 
-#include <common/Module.h>
-#include <string>
+#if LOVE_THREADS == LOVE_THREADS_POSIX
+#  include "posix/threads.cpp"
+#elif LOVE_THREADS == LOVE_THREADS_WIN32
+#  include "win32/threads.cpp"
+#elif LOVE_THREADS == LOVE_THREADS_SDL
+#  include "sdl/threads.cpp"
+#endif
 
 namespace love
 {
 namespace thread
 {
-	class ThreadModule : public Module
+	const char* threadAPI()
 	{
-	public:
-		virtual ~ThreadModule(){};
-		virtual void unregister(const std::string & name) = 0;
-	}; // ThreadModule
-
+#if LOVE_THREADS == LOVE_THREADS_POSIX
+		return "posix";
+#elif LOVE_THREADS == LOVE_THREADS_WIN32
+		return "win32";
+#elif LOVE_THREADS == LOVE_THREADS_SDL
+		return "sdl";
+#endif
+	}
 } // thread
 } // love
-
-#endif // LOVE_THREAD_THREAD_H

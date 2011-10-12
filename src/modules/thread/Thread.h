@@ -21,25 +21,26 @@
 #ifndef LOVE_THREAD_SDL_THREAD_H
 #define LOVE_THREAD_SDL_THREAD_H
 
-// SDL
-#include <SDL_thread.h>
-#include <SDL_mutex.h>
-
 // STL
 #include <map>
 #include <string>
+#include <vector>
+#include <cstring>
 
 // LOVE
-#include <thread/ThreadModule.h>
 #include <filesystem/File.h>
 #include <common/runtime.h>
+#include <common/Module.h>
+#include <thread/threads.h>
+
 
 namespace love
 {
 namespace thread
 {
-namespace sdl
-{
+
+	class ThreadModule;
+
 	enum ThreadVariantType
 	{
 		UNKNOWN = 0,
@@ -90,6 +91,7 @@ namespace sdl
 		ThreadVariant* getValue(const std::string & name);
 		void clearValue(const std::string & name);
 		void setValue(const std::string & name, ThreadVariant *v);
+		std::vector<std::string> getKeys();
 
 		void *mutex;
 		void *cond;
@@ -98,14 +100,27 @@ namespace sdl
 	class Thread : public love::Object
 	{
 	private:
-		SDL_Thread *handle;
-		love::thread::ThreadModule *module;
+		class ThreadThread: public ThreadBase {
+		private:
+			ThreadData* comm;
+
+		protected:
+			virtual void main();
+
+		public:
+			ThreadThread(ThreadData* comm);
+		};
+
+		ThreadThread *handle;
+
+		ThreadModule *module;
 		ThreadData *comm;
 		std::string name;
 		char *data;
-		SDL_mutex *mutex;
-		SDL_cond *cond;
+		Mutex *mutex;
+		Conditional *cond;
 		bool isThread;
+
 
 	public:
 		Thread(love::thread::ThreadModule *module, const std::string & name, love::Data *data);
@@ -116,6 +131,7 @@ namespace sdl
 		void wait();
 		std::string getName();
 		ThreadVariant *get(const std::string & name);
+		std::vector<std::string> getKeys();
 		ThreadVariant *demand(const std::string & name);
 		void clear(const std::string & name);
 		void set(const std::string & name, ThreadVariant *v);
@@ -125,7 +141,7 @@ namespace sdl
 
 	typedef std::map<std::string, Thread*> threadlist_t;
 
-	class ThreadModule : public love::thread::ThreadModule
+	class ThreadModule : public love::Module
 	{
 	private:
 		threadlist_t threads;
@@ -140,7 +156,6 @@ namespace sdl
 		void unregister(const std::string & name);
 		const char *getName() const;
 	}; // ThreadModule
-} // sdl
 } // thread
 } // love
 

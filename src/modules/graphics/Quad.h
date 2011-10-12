@@ -18,23 +18,44 @@
 * 3. This notice may not be removed or altered from any source distribution.
 **/
 
-#ifndef LOVE_IMAGE_WRAP_ENCODED_IMAGE_DATA_H
-#define LOVE_IMAGE_WRAP_ENCODED_IMAGE_DATA_H
+#ifndef LOVE_GRAPHICS_QUAD_H
+#define LOVE_GRAPHICS_QUAD_H
 
 // LOVE
-#include <common/runtime.h>
-#include "ImageData.h"
+#include <common/Object.h>
+#include <common/math.h>
 
 namespace love
 {
-namespace image
+namespace graphics
 {
-	EncodedImageData * luax_checkencodedimagedata(lua_State * L, int idx);
-	
-	int w_EncodedImageData_getFormat(lua_State * L);
-	int luaopen_encodedimagedata(lua_State * L);
+	class Quad : public Object
+	{
+	public:
 
-} // image
+		struct Viewport
+		{
+			float x, y, w, h;
+		};
+
+	public:
+		Quad();
+
+		virtual ~Quad();
+
+		virtual void refresh(const Viewport & v, float sw, float sh) = 0;
+
+		virtual void setViewport(const Viewport & v) = 0;
+		virtual Viewport getViewport() const = 0;
+
+		virtual void flip(bool x, bool y) = 0;
+
+		/**
+		* Gets a pointer to the vertices.
+		**/
+		virtual const vertex * getVertices() const = 0;
+	};
+} // graphics
 } // love
 
-#endif // LOVE_IMAGE_WRAP_ENCODED_IMAGE_DATA_H
+#endif // LOVE_GRAPHICS_QUAD_H

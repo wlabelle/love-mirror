@@ -27,7 +27,8 @@
 #include "wrap_Quad.h"
 #include "wrap_SpriteBatch.h"
 #include "wrap_ParticleSystem.h"
-#include "wrap_Framebuffer.h"
+#include "wrap_Canvas.h"
+#include "wrap_PixelEffect.h"
 #include "Graphics.h"
 
 namespace love
@@ -38,6 +39,7 @@ namespace opengl
 {
 	int w_checkMode(lua_State * L);
 	int w_setMode(lua_State * L);
+	int w_getMode(lua_State * L);
 	int w_toggleFullscreen(lua_State * L);
 	int w_reset(lua_State * L);
 	int w_clear(lua_State * L);
@@ -50,6 +52,8 @@ namespace opengl
 	int w_isCreated(lua_State * L);
 	int w_setScissor(lua_State * L);
 	int w_getScissor(lua_State * L);
+	int w_defineMask(lua_State * L);
+	int w_setMask(lua_State * L);
 	int w_newImage(lua_State * L);
 	int w_newQuad(lua_State * L);
 	int w_newFrame(lua_State * L);
@@ -57,7 +61,8 @@ namespace opengl
 	int w_newImageFont(lua_State * L);
 	int w_newSpriteBatch(lua_State * L);
 	int w_newParticleSystem(lua_State * L);
-	int w_newFramebuffer(lua_State * L); // commetns in function
+	int w_newCanvas(lua_State * L); // comments in function
+	int w_newPixelEffect(lua_State * L);
 	int w_setColor(lua_State * L);
 	int w_getColor(lua_State * L);
 	int w_setBackgroundColor(lua_State * L);
@@ -66,8 +71,10 @@ namespace opengl
 	int w_getFont(lua_State * L);
 	int w_setBlendMode(lua_State * L);
 	int w_setColorMode(lua_State * L);
+	int w_setDefaultImageFilter(lua_State * L);
 	int w_getBlendMode(lua_State * L);
 	int w_getColorMode(lua_State * L);
+	int w_getDefaultImageFilter(lua_State * L);
 	int w_setLineWidth(lua_State * L);
 	int w_setLineStyle(lua_State * L);
 	int w_setLine(lua_State * L);
@@ -83,6 +90,10 @@ namespace opengl
 	int w_getMaxPointSize(lua_State * L);
 	int w_newScreenshot(lua_State * L);
 	int w_setRenderTarget(lua_State * L);
+	int w_getRenderTarget(lua_State * L);
+	int w_setPixelEffect(lua_State * L);
+	int w_isSupported(lua_State * L);
+	int w_getGLSLVersion(lua_State * L);
 	int w_draw(lua_State * L);
 	int w_drawq(lua_State * L);
 	int w_drawTest(lua_State * L);
@@ -94,11 +105,13 @@ namespace opengl
 	int w_rectangle(lua_State * L);
 	int w_quad(lua_State * L);
 	int w_circle(lua_State * L);
+	int w_arc(lua_State * L);
 	int w_push(lua_State * L);
 	int w_pop(lua_State * L);
 	int w_rotate(lua_State * L);
 	int w_scale(lua_State * L);
 	int w_translate(lua_State * L);
+	int w_shear(lua_State * L);
 	int w_hasFocus(lua_State * L);
 	extern "C" LOVE_EXPORT int luaopen_love_graphics(lua_State * L);
 

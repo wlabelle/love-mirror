@@ -19,11 +19,12 @@
 **/
 
 #include "wrap_Graphics.h"
-
+#include <graphics/DrawQable.h>
 #include <image/ImageData.h>
 #include <font/Rasterizer.h>
 
 #include <scripts/graphics.lua.h>
+#include <cassert>
 
 namespace love
 {
@@ -51,6 +52,19 @@ namespace opengl
 		int fsaa = luaL_optint(L, 5, 0);
 		luax_pushboolean(L, instance->setMode(w, h, fs, vsync, fsaa));
 		return 1;
+	}
+
+	int w_getMode(lua_State * L)
+	{
+		int w, h, fsaa;
+		bool fs, vsync;
+		instance->getMode(&w, &h, &fs, &vsync, &fsaa);
+		lua_pushnumber(L, w);
+		lua_pushnumber(L, h);
+		lua_pushboolean(L, fs);
+		lua_pushboolean(L, vsync);
+		lua_pushnumber(L, fsaa);
+		return 5;
 	}
 
 	int w_toggleFullscreen(lua_State * L)
@@ -144,6 +158,43 @@ namespace opengl
 		return instance->getScissor(L);
 	}
 
+	int w_newStencil(lua_State * L)
+	{
+		// just return the function
+		if (!lua_isfunction(L, 1))
+			return luaL_typerror(L, 1, "function");
+		lua_settop(L, 1);
+		return 1;
+	}
+
+	static int setStencil(lua_State * L, bool invert)
+	{
+		// no argument -> clear mask
+		if (lua_isnoneornil(L, 1)) {
+			instance->discardStencil();
+			return 0;
+		}
+
+		if (!lua_isfunction(L, 1))
+			return luaL_typerror(L, 1, "mask");
+
+		instance->defineStencil();
+		lua_call(L, lua_gettop(L) - 1, 0); // call mask(...)
+		instance->useStencil(invert);
+
+		return 0;
+	}
+
+	int w_setStencil(lua_State * L)
+	{
+		return setStencil(L, false);
+	}
+
+	int w_setInvertedStencil(lua_State * L)
+	{
+		return setStencil(L, true);
+	}
+
 	int w_newImage(lua_State * L)
 	{
 		// Convert to File, if necessary.
@@ -176,12 +227,12 @@ namespace opengl
 
 	int w_newQuad(lua_State * L)
 	{
-		int x = luaL_checkint(L, 1);
-		int y = luaL_checkint(L, 2);
-		int w = luaL_checkint(L, 3);
-		int h = luaL_checkint(L, 4);
-		int sw = luaL_checkint(L, 5);
-		int sh = luaL_checkint(L, 6);
+		float x = (float) luaL_checknumber(L, 1);
+		float y = (float) luaL_checknumber(L, 2);
+		float w = (float) luaL_checknumber(L, 3);
+		float h = (float) luaL_checknumber(L, 4);
+		float sw = (float) luaL_checknumber(L, 5);
+		float sh = (float) luaL_checknumber(L, 6);
 
 		Quad * frame = instance->newQuad(x, y, w, h, sw, sh);
 
@@ -214,7 +265,7 @@ namespace opengl
 		}
 
 		// Convert to Rasterizer, if necessary.
-		if(luax_istype(L, 1, DATA_T) && !luax_istype(L, 1, FONT_FONT_DATA_T)) {
+		if(luax_istype(L, 1, DATA_T)) {
 			int idxs[] = {1, 2};
 			luax_convobj(L, idxs, 2, "font", "newRasterizer");
 		}
@@ -239,7 +290,7 @@ namespace opengl
 		Image::Filter img_filter;
 
 		// Convert to ImageData if necessary.
-		if(lua_isstring(L, 1) || luax_istype(L, 1, FILESYSTEM_FILE_T) || (luax_istype(L, 1, DATA_T) && !luax_istype(L, 1, IMAGE_IMAGE_DATA_T) && !luax_istype(L, 1, FONT_FONT_DATA_T)))
+		if(lua_isstring(L, 1) || luax_istype(L, 1, FILESYSTEM_FILE_T) || (luax_istype(L, 1, DATA_T) && !luax_istype(L, 1, IMAGE_IMAGE_DATA_T)))
 			luax_convobj(L, 1, "image", "newImageData");
 		else if(luax_istype(L, 1, GRAPHICS_IMAGE_T)) {
 			Image * i = luax_checktype<Image>(L, 1, "Image", GRAPHICS_IMAGE_T);
@@ -273,8 +324,18 @@ namespace opengl
 	{
 		Image * image = luax_checktype<Image>(L, 1, "Image", GRAPHICS_IMAGE_T);
 		int size = luaL_optint(L, 2, 1000);
-		int usage = luaL_optint(L, 3, SpriteBatch::USAGE_DYNAMIC);
-		SpriteBatch * t = instance->newSpriteBatch(image, size, usage);
+		SpriteBatch::UsageHint usage = SpriteBatch::USAGE_DYNAMIC;
+		if (lua_gettop(L) > 2)
+		{
+			if (!SpriteBatch::getConstant(luaL_checkstring(L, 3), usage))
+				usage = SpriteBatch::USAGE_DYNAMIC;
+		}
+		SpriteBatch * t = NULL;
+		try {
+			t = instance->newSpriteBatch(image, size, usage);
+		} catch(love::Exception& e) {
+			return luaL_error(L, e.what());
+		}
 		luax_newtype(L, "SpriteBatch", GRAPHICS_SPRITE_BATCH_T, (void*)t);
 		return 1;
 	}
@@ -288,43 +349,51 @@ namespace opengl
 		return 1;
 	}
 
-	int w_newFramebuffer(lua_State * L)
+	int w_newCanvas(lua_State * L)
 	{
 		// check if width and height are given. else default to screen dimensions.
 		int width  = luaL_optint(L, 1, instance->getWidth());
 		int height = luaL_optint(L, 2, instance->getHeight());
 		glGetError(); // clear opengl error flag
-		Framebuffer * framebuffer = instance->newFramebuffer(width, height);
 
-		//and there we go with the status... still disliked
-		if (framebuffer->getStatus() != GL_FRAMEBUFFER_COMPLETE) {
-			switch (framebuffer->getStatus()) {
-				case GL_FRAMEBUFFER_UNSUPPORTED:
-					return luaL_error(L, "Cannot create Framebuffer: "
-							"Not supported by your OpenGL implementation");
-				// remaining error codes are highly unlikely:
-				case GL_FRAMEBUFFER_UNDEFINED:
-				case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-				case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-				case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-				case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-				case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
-					return luaL_error(L, "Cannot create Framebuffer: "
-							"Error in implementation (please inform the love devs)");
-				default:
-					// my intel hda card wrongly returns 0 to glCheckFramebufferStatus() but sets
-					// no error flag. I think it meant to return GL_FRAMEBUFFER_UNSUPPORTED, but who
-					// knows.
-					if (glGetError() == GL_NO_ERROR)
-						return luaL_error(L, "Cannot create Framebuffer: "
-								"May not be supported by your OpenGL implementation.");
-					// the remaining error is an indication of a serious fuckup since it should
-					// only be returned if glCheckFramebufferStatus() was called with the wrong
-					// arguments.
-					return luaL_error(L, "Cannot create Framebuffer: Aliens did it (OpenGL error code: %d)", glGetError());
-			}
+		Canvas * canvas = NULL;
+		try {
+			canvas = instance->newCanvas(width, height);
+		} catch (Exception& e) {
+			return luaL_error(L, e.what());
 		}
-		luax_newtype(L, "Framebuffer", GRAPHICS_FRAMEBUFFER_T, (void*)framebuffer);
+
+		if (NULL == canvas)
+			return luaL_error(L, "Canvas not created, but no error thrown. I don't even...");
+
+		luax_newtype(L, "Canvas", GRAPHICS_CANVAS_T, (void*)canvas);
+		return 1;
+	}
+
+	int w_newPixelEffect(lua_State * L)
+	{
+		if (!PixelEffect::isSupported())
+			return luaL_error(L, "Sorry, your graphics card does not support pixel effects.");
+
+		try {
+			luaL_checkstring(L, 1);
+
+			luax_getfunction(L, "graphics", "_effectCodeToGLSL");
+			lua_pushvalue(L, 1);
+			lua_pcall(L, 1, 1, 0);
+
+			const char* code = lua_tostring(L, -1);
+			PixelEffect * effect = instance->newPixelEffect(code);
+			luax_newtype(L, "PixelEffect", GRAPHICS_PIXELEFFECT_T, (void*)effect);
+		} catch (love::Exception& e) {
+			// memory is freed in Graphics::newPixelEffect
+			luax_getfunction(L, "graphics", "_transformGLSLErrorMessages");
+			lua_pushstring(L, e.what());
+			lua_pcall(L, 1,1, 0);
+			const char* err = lua_tostring(L, -1);
+			return luaL_error(L, err);
+		}
+
 		return 1;
 	}
 
@@ -445,7 +514,7 @@ namespace opengl
 			}
 
 			// Convert to Rasterizer, if necessary.
-			if(luax_istype(L, 1, DATA_T) && !luax_istype(L, 1, FONT_FONT_DATA_T)) {
+			if(luax_istype(L, 1, DATA_T)) {
 				int idxs[] = {1, 2};
 				luax_convobj(L, idxs, 2, "font", "newRasterizer");
 			}
@@ -499,6 +568,25 @@ namespace opengl
 		return 0;
 	}
 
+	int w_setDefaultImageFilter(lua_State * L)
+	{
+		Image::FilterMode min;
+		Image::FilterMode mag;
+		const char * minstr = luaL_checkstring(L, 1);
+		const char * magstr = luaL_checkstring(L, 2);
+		if (!Image::getConstant(minstr, min))
+			return luaL_error(L, "Invalid filter mode: %s", minstr);
+		if (!Image::getConstant(magstr, mag))
+			return luaL_error(L, "Invalid filter mode: %s", magstr);
+
+		Image::Filter f;
+		f.min = min;
+		f.mag = mag;
+		instance->setDefaultImageFilter(f);
+
+		return 0;
+	}
+
 	int w_getBlendMode(lua_State * L)
 	{
 		Graphics::BlendMode mode = instance->getBlendMode();
@@ -519,6 +607,18 @@ namespace opengl
 
 		lua_pushstring(L, str);
 		return 1;
+	}
+
+	int w_getDefaultImageFilter(lua_State * L)
+	{
+		const Image::Filter& f = instance->getDefaultImageFilter();
+		const char * minstr;
+		const char * magstr;
+		Image::getConstant(f.min, minstr);
+		Image::getConstant(f.mag, magstr);
+		lua_pushstring(L, minstr);
+		lua_pushstring(L, magstr);
+		return 2;
 	}
 
 	int w_setLineWidth(lua_State * L)
@@ -556,20 +656,6 @@ namespace opengl
 		return 0;
 	}
 
-	int w_setLineStipple(lua_State * L)
-	{
-		if(lua_gettop(L) == 0)
-		{
-			instance->setLineStipple();
-			return 0;
-		}
-
-		unsigned short pattern = (unsigned short)luaL_checkint(L, 1);
-		int repeat = luaL_optint(L, 2, 1);
-		instance->setLineStipple(pattern, repeat);
-		return 0;
-	}
-
 	int w_getLineWidth(lua_State * L)
 	{
 		lua_pushnumber(L, instance->getLineWidth());
@@ -583,11 +669,6 @@ namespace opengl
 		Graphics::getConstant(style, str);
 		lua_pushstring(L, str);
 		return 1;
-	}
-
-	int w_getLineStipple(lua_State * L)
-	{
-		return instance->getLineStipple(L);
 	}
 
 	int w_setPointSize(lua_State * L)
@@ -655,15 +736,69 @@ namespace opengl
 	{
 		// called with nil or none -> reset to default buffer
 		if (lua_isnoneornil(L,1)) {
-			Framebuffer::bindDefaultBuffer();
+			Canvas::bindDefaultCanvas();
 			return 0;
 		}
 
-		Framebuffer * fbo = luax_checkfbo(L, 1);
+		Canvas * canvas = luax_checkcanvas(L, 1);
 		// this unbinds the previous fbo
-		fbo->startGrab();
+		canvas->startGrab();
 
 		return 0;
+	}
+
+	int w_getRenderTarget(lua_State * L)
+	{
+		Canvas *canvas = Canvas::current;
+		if (canvas) {
+			canvas->retain();
+			luax_newtype(L, "Canvas", GRAPHICS_CANVAS_T, (void*) canvas);
+		}
+		else
+			lua_pushnil(L);
+		return 1;
+	}
+
+	int w_setPixelEffect(lua_State * L)
+	{
+		if (lua_isnoneornil(L,1)) {
+			PixelEffect::detach();
+			return 0;
+		}
+
+		PixelEffect * effect = luax_checkpixeleffect(L, 1);
+		effect->attach();
+		return 0;
+	}
+
+	int w_isSupported(lua_State * L)
+	{
+		bool supported = true;
+		size_t len = lua_gettop(L);
+		Graphics::Support support;
+		for (unsigned int i = 1; i <= len; i++)
+		{
+			const char * str = luaL_checkstring(L, i);
+			if(!Graphics::getConstant(str, support))
+				supported = false;
+			switch(support)
+			{
+				case Graphics::SUPPORT_CANVAS:
+					if (!Canvas::isSupported())
+						supported = false;
+					break;
+				case Graphics::SUPPORT_PIXELEFFECT:
+					if (!PixelEffect::isSupported())
+						supported = false;
+					break;
+				default:
+					supported = false;
+			}
+			if (!supported)
+				break;
+		}
+		lua_pushboolean(L, supported);
+		return 1;
 	}
 
 	/**
@@ -676,6 +811,8 @@ namespace opengl
 	* @param sy The scale factor along the y-axis. (1 = normal).
 	* @param ox The offset along the x-axis.
 	* @param oy The offset along the y-axis.
+	* @param kx Shear along the x-axis.
+	* @param ky Shear along the y-axis.
 	**/
 	int w_draw(lua_State * L)
 	{
@@ -687,12 +824,14 @@ namespace opengl
 		float sy = (float)luaL_optnumber(L, 6, sx);
 		float ox = (float)luaL_optnumber(L, 7, 0);
 		float oy = (float)luaL_optnumber(L, 8, 0);
-		drawable->draw(x, y, angle, sx, sy, ox, oy);
+		float kx = (float)luaL_optnumber(L, 9, 0);
+		float ky = (float)luaL_optnumber(L, 10, 0);
+		drawable->draw(x, y, angle, sx, sy, ox, oy, kx, ky);
 		return 0;
 	}
 
 	/**
-	* Draws an Quad of an Image at the specified coordinates,
+	* Draws an Quad of a DrawQable at the specified coordinates,
 	* with rotation and scaling along both axes.
 	*
 	* @param q The Quad to draw.
@@ -703,10 +842,12 @@ namespace opengl
 	* @param sy The scale factor along the y-axis. (1 = normal).
 	* @param ox The offset along the x-axis.
 	* @param oy The offset along the y-axis.
+	* @param kx Shear along the x-axis.
+	* @param ky Shear along the y-axis.
 	**/
 	int w_drawq(lua_State * L)
 	{
-		Image * image = luax_checktype<Image>(L, 1, "Image", GRAPHICS_IMAGE_T);
+		DrawQable * dq = luax_checktype<DrawQable>(L, 1, "DrawQable", GRAPHICS_DRAWQABLE_T);
 		Quad * q = luax_checkframe(L, 2);
 		float x = (float)luaL_checknumber(L, 3);
 		float y = (float)luaL_checknumber(L, 4);
@@ -715,7 +856,9 @@ namespace opengl
 		float sy = (float)luaL_optnumber(L, 7, sx);
 		float ox = (float)luaL_optnumber(L, 8, 0);
 		float oy = (float)luaL_optnumber(L, 9, 0);
-		image->drawq(q, x, y, angle, sx, sy, ox, oy);
+		float kx = (float)luaL_optnumber(L, 10, 0);
+		float ky = (float)luaL_optnumber(L, 11, 0);
+		dq->drawq(q, x, y, angle, sx, sy, ox, oy, kx, ky);
 		return 0;
 	}
 
@@ -741,7 +884,18 @@ namespace opengl
 		float angle = (float)luaL_optnumber(L, 4, 0.0f);
 		float sx = (float)luaL_optnumber(L, 5, 1.0f);
 		float sy = (float)luaL_optnumber(L, 6, sx);
-		instance->print(str, x, y, angle, sx, sy);
+		float ox = (float)luaL_optnumber(L, 7, 0.0f);
+		float oy = (float)luaL_optnumber(L, 8, 0.0f);
+		float kx = (float)luaL_optnumber(L, 9, 0.0f);
+		float ky = (float)luaL_optnumber(L, 10, 0.0f);
+		try
+		{
+			instance->print(str, x, y, angle, sx, sy, ox, oy, kx,ky);
+		}
+		catch (love::Exception e)
+		{
+			return luaL_error(L, "Decoding error: %s", e.what());
+		}
 		return 0;
 	}
 
@@ -761,7 +915,14 @@ namespace opengl
 				return luaL_error(L, "Incorrect alignment: %s", str);
 		}
 
-		instance->printf(str, x, y, wrap, align);
+		try
+		{
+			instance->printf(str, x, y, wrap, align);
+		}
+		catch (love::Exception e)
+		{
+			return luaL_error(L, "Decoding error: %s", e.what());
+		}
 		return 0;
 	}
 
@@ -776,15 +937,32 @@ namespace opengl
 	int w_line(lua_State * L)
 	{
 		int args = lua_gettop(L);
-		if( args == 1 || args > 4) {
-			instance->polyline(L);
-		} else {
-			float x1 = (float)luaL_checknumber(L, 1);
-			float y1 = (float)luaL_checknumber(L, 2);
-			float x2 = (float)luaL_checknumber(L, 3);
-			float y2 = (float)luaL_checknumber(L, 4);
-			instance->line(x1, y1, x2, y2);
+		bool is_table = false;
+		if (args == 1 && lua_istable(L, 1)) {
+			args = lua_objlen(L, 1);
+			is_table = true;
 		}
+		if (args % 2 != 0)
+			return luaL_error(L, "Number of vertices must be a multiple of two");
+		else if (args < 4)
+			return luaL_error(L, "Need at least two vertices to draw a line");
+
+		float* coords = new float[args];
+		if (is_table) {
+			for (int i = 0; i < args; ++i) {
+				lua_pushnumber(L, i + 1);
+				lua_rawget(L, 1);
+				coords[i] = luax_tofloat(L, -1);
+				lua_pop(L, 1);
+			}
+		} else {
+			for (int i = 0; i < args; ++i)
+				coords[i] = luax_tofloat(L, i + 1);
+		}
+
+		instance->polyline(coords, args);
+
+		delete[] coords;
 		return 0;
 	}
 
@@ -849,25 +1027,99 @@ namespace opengl
 		float x = (float)luaL_checknumber(L, 2);
 		float y = (float)luaL_checknumber(L, 3);
 		float radius = (float)luaL_checknumber(L, 4);
-		int points = luaL_optint(L, 5, 10);
+		int points;
+		if (lua_gettop(L) > 4)
+			points = lua_tointeger(L, 5);
+		else
+			points = radius > 10 ? radius : 10;
 		instance->circle(mode, x, y, radius, points);
+		return 0;
+	}
+	
+	int w_arc(lua_State * L)
+	{
+		Graphics::DrawMode mode;
+		const char * str = luaL_checkstring(L, 1);
+		if(!Graphics::getConstant(str, mode))
+			return luaL_error(L, "Incorrect draw mode %s", str);
+		
+		float x = (float)luaL_checknumber(L, 2);
+		float y = (float)luaL_checknumber(L, 3);
+		float radius = (float)luaL_checknumber(L, 4);
+		float angle1 = (float)luaL_checknumber(L, 5);
+		float angle2 = (float)luaL_checknumber(L, 6);
+		int points = luaL_optint(L, 7, 10);
+		instance->arc(mode, x, y, radius, angle1, angle2, points);
 		return 0;
 	}
 
 	int w_polygon(lua_State * L)
 	{
-		return instance->polygon(L);
-	}
+		int args = lua_gettop(L) - 1;
 
-	int w_push(lua_State *)
-	{
-		instance->push();
+		Graphics::DrawMode mode;
+		const char * str = luaL_checkstring(L, 1);
+		if(!Graphics::getConstant(str, mode))
+			return luaL_error(L, "Invalid draw mode: %s", str);
+
+		bool is_table = false;
+		float* coords;
+		if (args == 1 && lua_istable(L, 2)) {
+			args = lua_objlen(L, 2);
+			is_table = true;
+		}
+
+		if (args % 2 != 0)
+			return luaL_error(L, "Number of vertices must be a multiple of two");
+		else if (args < 6)
+			return luaL_error(L, "Need at least three vertices to draw a polygon");
+
+		// fetch coords
+		coords = new float[args + 2];
+		if (is_table) {
+			for (int i = 0; i < args; ++i) {
+				lua_pushnumber(L, i + 1);
+				lua_rawget(L, 2);
+				coords[i] = luax_tofloat(L, -1);
+				lua_pop(L, 1);
+			}
+		} else {
+			for (int i = 0; i < args; ++i)
+				coords[i] = luax_tofloat(L, i + 2);
+		}
+
+		// make a closed loop
+		coords[args]   = coords[0];
+		coords[args+1] = coords[1];
+		instance->polygon(mode, coords, args+2);
+		delete[] coords;
+	
 		return 0;
 	}
 
-	int w_pop(lua_State *)
+	int w_push(lua_State *L)
 	{
-		instance->pop();
+		try
+		{
+			instance->push();
+		}
+		catch (love::Exception e)
+		{
+			return luaL_error(L, e.what());
+		}
+		return 0;
+	}
+
+	int w_pop(lua_State *L)
+	{
+		try
+		{
+			instance->pop();
+		}
+		catch (love::Exception e)
+		{
+			return luaL_error(L, e.what());
+		}
 		return 0;
 	}
 
@@ -894,6 +1146,14 @@ namespace opengl
 		return 0;
 	}
 
+	int w_shear(lua_State * L)
+	{
+		float kx = (float)luaL_checknumber(L, 1);
+		float ky = (float)luaL_checknumber(L, 2);
+		instance->shear(kx, ky);
+		return 0;
+	}
+
 	int w_hasFocus(lua_State * L)
 	{
 		luax_pushboolean(L, instance->hasFocus());
@@ -905,6 +1165,7 @@ namespace opengl
 	static const luaL_Reg functions[] = {
 		{ "checkMode", w_checkMode },
 		{ "setMode", w_setMode },
+		{ "getMode", w_getMode },
 		{ "toggleFullscreen", w_toggleFullscreen },
 		{ "reset", w_reset },
 		{ "clear", w_clear },
@@ -916,7 +1177,8 @@ namespace opengl
 		{ "newImageFont", w_newImageFont },
 		{ "newSpriteBatch", w_newSpriteBatch },
 		{ "newParticleSystem", w_newParticleSystem },
-		{ "newFramebuffer", w_newFramebuffer },
+		{ "newCanvas", w_newCanvas },
+		{ "newPixelEffect", w_newPixelEffect },
 
 		{ "setColor", w_setColor },
 		{ "getColor", w_getColor },
@@ -928,15 +1190,15 @@ namespace opengl
 
 		{ "setBlendMode", w_setBlendMode },
 		{ "setColorMode", w_setColorMode },
+		{ "setDefaultImageFilter", w_setDefaultImageFilter },
 		{ "getBlendMode", w_getBlendMode },
 		{ "getColorMode", w_getColorMode },
+		{ "getDefaultImageFilter", w_getDefaultImageFilter },
 		{ "setLineWidth", w_setLineWidth },
 		{ "setLineStyle", w_setLineStyle },
 		{ "setLine", w_setLine },
-		{ "setLineStipple", w_setLineStipple },
 		{ "getLineWidth", w_getLineWidth },
 		{ "getLineStyle", w_getLineStyle },
-		{ "getLineStipple", w_getLineStipple },
 		{ "setPointSize", w_setPointSize },
 		{ "setPointStyle", w_setPointStyle },
 		{ "setPoint", w_setPoint },
@@ -945,6 +1207,11 @@ namespace opengl
 		{ "getMaxPointSize", w_getMaxPointSize },
 		{ "newScreenshot", w_newScreenshot },
 		{ "setRenderTarget", w_setRenderTarget },
+		{ "getRenderTarget", w_getRenderTarget },
+
+		{ "setPixelEffect", w_setPixelEffect },
+
+		{ "isSupported", w_isSupported },
 
 		{ "draw", w_draw },
 		{ "drawq", w_drawq },
@@ -968,12 +1235,17 @@ namespace opengl
 		{ "setScissor", w_setScissor },
 		{ "getScissor", w_getScissor },
 
+		{ "newStencil", w_newStencil },
+		{ "setStencil", w_setStencil },
+		{ "setInvertedStencil", w_setInvertedStencil },
+
 		{ "point", w_point },
 		{ "line", w_line },
 		{ "triangle", w_triangle },
 		{ "rectangle", w_rectangle },
 		{ "quad", w_quad },
 		{ "circle", w_circle },
+		{ "arc", w_arc },
 
 		{ "polygon", w_polygon },
 
@@ -981,8 +1253,8 @@ namespace opengl
 		{ "pop", w_pop },
 		{ "rotate", w_rotate },
 		{ "scale", w_scale },
-
 		{ "translate", w_translate },
+		{ "shear", w_shear },
 
 		{ "hasFocus", w_hasFocus },
 
@@ -996,7 +1268,8 @@ namespace opengl
 		luaopen_frame,
 		luaopen_spritebatch,
 		luaopen_particlesystem,
-		luaopen_framebuffer,
+		luaopen_canvas,
+		luaopen_pixeleffect,
 		0
 	};
 

@@ -27,12 +27,10 @@
 #include <iostream>
 #include <cmath>
 
-// SDL
-#include <SDL.h>
-
 // LOVE
 #include <common/config.h>
 #include <common/Exception.h>
+#include <thread/threads.h>
 
 // OpenAL
 #ifdef LOVE_MACOSX
@@ -70,7 +68,7 @@ namespace openal
 
 		// Only one thread can access this object at the same time. This mutex will
 		// make sure of that.
-		SDL_mutex * mutex;
+		thread::Mutex* mutex;
 
 	public:
 
@@ -102,6 +100,9 @@ namespace openal
 		void resume(Source * source);
 		void rewind();
 		void rewind(Source * source);
+		void softRewind(Source * source);
+		void seek(Source * source, float offset, void * unit);
+		float tell(Source * source, void * unit);
 
 	private:
 

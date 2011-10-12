@@ -22,9 +22,8 @@
 #define LOVE_GRAPHICS_OPENGL_QUAD_H
 
 // LOVE
-#include <common/Object.h>
 #include <common/math.h>
-#include <graphics/Drawable.h>
+#include <graphics/Quad.h>
 
 namespace love
 {
@@ -32,21 +31,15 @@ namespace graphics
 {
 namespace opengl
 {
-	class Quad : public Object
+	class Quad : public love::graphics::Quad
 	{
-	public:
-
-		struct Viewport
-		{
-			int x, y, w, h;
-		};
-
-	private:
-
+		
+	protected:
+		
 		vertex vertices[4];
-
+		
 		Viewport viewport;
-		int sw, sh;
+		float sw, sh;
 
 	public:
 
@@ -58,11 +51,11 @@ namespace opengl
 		* @param sw Width of the source image.
 		* @param sh Height of the source image.
 		**/
-		Quad(const Viewport & v, int sw, int sh);
+		Quad(const Viewport & v, float sw, float sh);
 
 		virtual ~Quad();
 
-		void refresh(const Viewport & v, int sw, int sh);
+		void refresh(const Viewport & v, float sw, float sh);
 
 		void setViewport(const Viewport & v);
 		Viewport getViewport() const;

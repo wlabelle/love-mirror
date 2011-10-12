@@ -59,13 +59,20 @@ namespace sdl
 
 	int w_isDown(lua_State * L)
 	{
-		Mouse::Button button;
-
-		if(!Mouse::getConstant(luaL_checkstring(L, 1), button))
-			luax_pushboolean(L, false);
-		else
-			luax_pushboolean(L, instance->isDown(button));
-
+		Mouse::Button b;
+		unsigned int num = lua_gettop(L);
+		Mouse::Button * buttonlist = new Mouse::Button[num+1];
+		unsigned int counter = 0;
+		
+		for (unsigned int i = 0; i < num; i++)
+		{
+			if(Mouse::getConstant(luaL_checkstring(L, i+1), b))
+				buttonlist[counter++] = b;
+		}
+		buttonlist[counter] = Mouse::BUTTON_MAX_ENUM;
+		
+		luax_pushboolean(L, instance->isDown(buttonlist));
+		delete[] buttonlist;
 		return 1;
 	}
 
@@ -82,7 +89,7 @@ namespace sdl
 		return 1;
 	}
 
-	int w_setGrap(lua_State * L)
+	int w_setGrab(lua_State * L)
 	{
 		bool b = luax_toboolean(L, 1);
 		instance->setGrab(b);
@@ -104,7 +111,7 @@ namespace sdl
 		{ "setVisible", w_setVisible },
 		{ "isVisible", w_isVisible },
 		{ "getPosition", w_getPosition },
-		{ "setGrab", w_setGrap },
+		{ "setGrab", w_setGrab },
 		{ "isGrabbed", w_isGrabbed },
 		{ 0, 0 }
 	};

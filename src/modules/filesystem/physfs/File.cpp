@@ -42,6 +42,8 @@ namespace physfs
 
 	File::~File()
 	{
+		if (mode != CLOSED)
+			close();
 	}
 	
 	bool File::open(Mode mode)
@@ -166,9 +168,26 @@ namespace physfs
 		return write(data->getData(), (size == ALL) ? data->getSize() : size);
 	}
 
+#ifdef LOVE_WINDOWS
+	// MSVC doesn't like the 'this' keyword
+	// well, we'll use 'that'.
+	// It zigs, we zag.
+	inline bool test_eof(File * that, PHYSFS_File *)
+	{
+		int pos = that->tell();
+		int size = that->getSize();
+		return pos == -1 || size == -1 || pos >= size;
+	}
+#else
+	inline bool test_eof(File *, PHYSFS_File * file)
+	{
+		return PHYSFS_eof(file);
+	}
+#endif
+
 	bool File::eof()
 	{
-		if(file == 0 || PHYSFS_eof(file))
+		if(file == 0 || test_eof(this, file))
 			return true;
 		return false;
 	}

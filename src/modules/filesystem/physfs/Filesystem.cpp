@@ -34,7 +34,7 @@ namespace filesystem
 namespace physfs
 {
 	Filesystem::Filesystem()
-		: open_count(0), buffer(0), isInited(false)
+		: open_count(0), buffer(0), isInited(false), release(false), releaseSet(false)
 	{
 	}
 
@@ -59,6 +59,21 @@ namespace physfs
 		isInited = true;
 	}
 
+	void Filesystem::setRelease(bool release)
+	{
+		if (releaseSet)
+			return;
+		this->release = release;
+		releaseSet = true;
+	}
+
+	bool Filesystem::isRelease() const
+	{
+		if (!releaseSet)
+			return false;
+		return release;
+	}
+
 	bool Filesystem::setIdentity( const char * ident )
 	{
 		if(!isInited)
@@ -68,11 +83,14 @@ namespace physfs
 		save_identity = std::string(ident);
 
 		// Generate the relative path to the game save folder.
-		save_path_relative = std::string(LOVE_APPDATA_FOLDER LOVE_PATH_SEPARATOR) + save_identity;
+		save_path_relative = std::string(LOVE_APPDATA_PREFIX LOVE_APPDATA_FOLDER LOVE_PATH_SEPARATOR) + save_identity;
 
 		// Generate the full path to the game save folder.
 		save_path_full = std::string(getAppdataDirectory()) + std::string(LOVE_PATH_SEPARATOR);
-		save_path_full += save_path_relative;
+		if (release)
+			save_path_full += std::string(LOVE_APPDATA_PREFIX) + save_identity;
+		else
+			save_path_full += save_path_relative;
 
 		// We now have something like:
 		// save_identity: game
@@ -120,7 +138,13 @@ namespace physfs
 			return false;
 
 		// Create the save folder. (We're now "at" %APPDATA%).
-		if(!mkdir(save_path_relative.c_str()))
+		bool success = false;
+		if (release)
+			success = mkdir(save_identity.c_str());
+		else
+			success = mkdir(save_path_relative.c_str());
+
+		if(!success)
 		{
 			PHYSFS_setWriteDir(0); // Clear the write directory in case of error.
 			return false;
@@ -428,7 +452,7 @@ namespace physfs
 			lua_pop(L, 1);
 
 			luax_newtype(L, "File", FILESYSTEM_FILE_T, file, false);
-			lua_pushboolean(L, 1); // 1 = autoclose.
+			lua_pushnumber(L, 1); // 1 = autoclose.
 		}
 		else
 			return luaL_error(L, "Expected filename.");
@@ -507,7 +531,7 @@ namespace physfs
 			// Set the beginning of the next line.
 			if(!file->eof())
 				file->seek(newline+1);
-
+	
 			return 1;
 		}
 
@@ -517,7 +541,6 @@ namespace physfs
 			file->release();
 		}
 
-		// else: (newline <= 0)
 		return 0;
 	}
 
@@ -530,19 +553,19 @@ namespace physfs
 		if(!lua_isstring(L, -1))
 			return luaL_error(L, "The argument must be a string.");
 
-		const char * filename = lua_tostring(L, -1);
+		std::string filename = lua_tostring(L, -1);
 
 		// The file must exist.
-		if(!exists(filename))
-			return luaL_error(L, "File %s does not exist.", filename);
+		if(!exists(filename.c_str()))
+			return luaL_error(L, "File %s does not exist.", filename.c_str());
 
 		// Create the file.
-		File * file = newFile(filename);
+		File * file = newFile(filename.c_str());
 
 		// Get the data from the file.
 		Data * data = file->read();
 
-		int status = luaL_loadbuffer(L, (const char *)data->getData(), data->getSize(), filename);
+		int status = luaL_loadbuffer(L, (const char *)data->getData(), data->getSize(), ("@" + filename).c_str());
 
 		data->release();
 		file->release();

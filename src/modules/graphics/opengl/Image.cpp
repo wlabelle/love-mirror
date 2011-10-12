@@ -23,13 +23,15 @@
 // STD
 #include <cstring> // For memcpy
 
+#include <iostream>
+using namespace std;
+
 namespace love
 {
 namespace graphics
 {
 namespace opengl
 {
-
 	Image::Image(love::image::ImageData * data)
 		: width((float)(data->getWidth())), height((float)(data->getHeight())), texture(0)
 	{
@@ -47,7 +49,6 @@ namespace opengl
 		vertices[1].s = 0; vertices[1].t = 1;
 		vertices[2].s = 1; vertices[2].t = 1;
 		vertices[3].s = 1; vertices[3].t = 0;
-
 	}
 
 	Image::~Image()
@@ -103,24 +104,24 @@ namespace opengl
 		vertices[3].s = tx+tw; vertices[3].t = ty;
 	}
 
-	void Image::draw(float x, float y, float angle, float sx, float sy, float ox, float oy) const
+	void Image::draw(float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const
 	{
 		static Matrix t;
 
-		t.setTransformation(x, y, angle, sx, sy, ox, oy);
+		t.setTransformation(x, y, angle, sx, sy, ox, oy, kx, ky);
 		drawv(t, vertices);
 	}
 
-	void Image::drawq(Quad * quad, float x, float y, float angle, float sx, float sy, float ox, float oy) const
+	void Image::drawq(love::graphics::Quad * quad, float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const
 	{
 		static Matrix t;
 		const vertex * v = quad->getVertices();
 
-		t.setTransformation(x, y, angle, sx, sy, ox, oy);
+		t.setTransformation(x, y, angle, sx, sy, ox, oy, kx, ky);
 		drawv(t, v);
 	}
 
-	void Image::setFilter(Image::Filter f)
+	void Image::setFilter(const Image::Filter& f)
 	{
 		GLint gmin, gmag;
 		gmin = gmag = 0; // so that they're not used uninitialized
@@ -277,6 +278,14 @@ namespace opengl
 
 	bool Image::loadVolatile()
 	{
+		if (GLEE_ARB_texture_non_power_of_two)
+			return loadVolatileNPOT();
+		else
+			return loadVolatilePOT();
+	}
+
+	bool Image::loadVolatilePOT()
+	{
 		glGenTextures(1,(GLuint*)&texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -284,7 +293,53 @@ namespace opengl
 
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		
+		float p2width = next_p2(width);
+		float p2height = next_p2(height);
+		float s = width/p2width;
+		float t = height/p2height;
+		
+		vertices[1].t = t;
+		vertices[2].t = t;
+		vertices[2].s = s;
+		vertices[3].s = s;
 
+		glTexImage2D(GL_TEXTURE_2D,
+			0,
+			GL_RGBA8,
+			(GLsizei)p2width,
+			(GLsizei)p2height,
+			0,
+			GL_RGBA,
+			GL_UNSIGNED_BYTE,
+			0);
+			
+		glTexSubImage2D(GL_TEXTURE_2D,
+			0,
+			0,
+			0,
+			(GLsizei)width,
+			(GLsizei)height,
+			GL_RGBA,
+			GL_UNSIGNED_BYTE,
+			data->getData());
+
+		setFilter(settings.filter);
+		setWrap(settings.wrap);
+
+		return true;
+	}
+
+	bool Image::loadVolatileNPOT()
+	{
+		glGenTextures(1,(GLuint*)&texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		
 		glTexImage2D(GL_TEXTURE_2D,
 			0,
 			GL_RGBA8,

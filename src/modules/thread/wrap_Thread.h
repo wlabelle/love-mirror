@@ -30,14 +30,13 @@ namespace love
 	extern StringMap<Type, TYPE_MAX_ENUM> types;
 namespace thread
 {
-namespace sdl
-{
 	Thread *luax_checkthread(lua_State *L, int idx);
 	int w_Thread_start(lua_State *L);
 	int w_Thread_kill(lua_State *L);
 	int w_Thread_wait(lua_State *L);
 	int w_Thread_getName(lua_State *L);
 	int w_Thread_get(lua_State *L);
+	int w_Thread_getKeys(lua_State *L);
 	int w_Thread_demand(lua_State *L);
 	int w_Thread_peek(lua_State *L);
 	int w_Thread_set(lua_State *L);
@@ -49,7 +48,7 @@ namespace sdl
 	int w_getThread(lua_State *L);
 
 	extern "C" LOVE_EXPORT int luaopen_love_thread(lua_State * L);
-} // sdl
+
 } // thread
 } // love
 

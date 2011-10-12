@@ -21,6 +21,7 @@
 #include "wrap_ImageData.h"
 
 #include <common/wrap_Data.h>
+#include <filesystem/File.h>
 
 namespace love
 {
@@ -50,7 +51,15 @@ namespace image
 		ImageData * t = luax_checkimagedata(L, 1);
 		int x = luaL_checkint(L, 2);
 		int y = luaL_checkint(L, 3);
-		pixel c = t->getPixel(x, y);
+		pixel c;
+		try
+		{
+			c = t->getPixel(x, y);
+		}
+		catch (love::Exception *e)
+		{
+			return luaL_error(L, "%s", e->what());
+		}
 		lua_pushnumber(L, c.r);
 		lua_pushnumber(L, c.g);
 		lua_pushnumber(L, c.b);
@@ -68,7 +77,14 @@ namespace image
 		c.g = luaL_checkint(L, 5);
 		c.b = luaL_checkint(L, 6);
 		c.a = luaL_checkint(L, 7);
-		t->setPixel(x, y, c);
+		try
+		{
+			t->setPixel(x, y, c);
+		}
+		catch (love::Exception *e)
+		{
+			return luaL_error(L, "%s", e->what());
+		}
 		return 0;
 	}
 
@@ -130,12 +146,26 @@ namespace image
 	int w_ImageData_encode(lua_State * L)
 	{
 		ImageData * t = luax_checkimagedata(L, 1);
-		const char * fmt = luaL_checkstring(L, 2);
-		EncodedImageData::Format f;
-		EncodedImageData::getConstant(fmt, f);
-		EncodedImageData * eid = t->encode(f);
-		luax_newtype(L, "EncodedImageData", IMAGE_ENCODED_IMAGE_DATA_T, (void*)eid);
-		return 1;
+		if(lua_isstring(L, 2))
+			luax_convobj(L, 2, "filesystem", "newFile");
+		love::filesystem::File * file = luax_checktype<love::filesystem::File>(L, 2, "File", FILESYSTEM_FILE_T);
+		const char * fmt;
+		if (lua_isnoneornil(L, 3)) {
+			fmt = file->getExtension().c_str();
+		} else {
+			fmt = luaL_checkstring(L, 3);
+		}
+		ImageData::Format format;
+		ImageData::getConstant(fmt, format);
+		try
+		{
+			t->encode(file, format);
+		}
+		catch (love::Exception & e)
+		{
+			return luaL_error(L, e.what());
+		}
+		return 0;
 	}
 
 	static const luaL_Reg functions[] = {

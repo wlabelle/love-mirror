@@ -93,8 +93,14 @@ namespace opengl
 		* @param x The x-coordinate.
 		* @param y The y-coordinate.
 		* @param angle The amount of rotation.
+		* @param sx Scale along the x axis.
+		* @param sy Scale along the y axis.
+		* @param ox The origin offset along the x-axis.
+		* @param oy The origin offset along the y-axis.
+		* @param kx Shear along the x axis.
+		* @param ky Shear along the y axis.
 		**/
-		void print(std::string text, float x, float y, float angle = 0.0f, float sx = 1.0f, float sy = 1.0f);
+		void print(std::string text, float x, float y, float angle = 0.0f, float sx = 1.0f, float sy = 1.0f, float ox = 0.0f, float oy = 0.0f, float kx = 0.0f, float ky = 0.0f);
 
 		/**
 		* Prints the character at the designated position.
@@ -129,12 +135,12 @@ namespace opengl
 		 * Returns the maximal width of a wrapped string
 		 * and optionally the number of lines
 		 *
-		 * @param line A line of text
+		 * @param text The input text
 		 * @param wrap The number of pixels to wrap at
-		 * @param lines Optional output of the number of lines needed
+		 * @param max_width Optional output of the maximum width
+		 * Returns a vector with the lines.
 		 **/
-		int getWrap(const std::string & line, float wrap, int *lines = 0);
-		int getWrap(const char * line, float wrap, int *lines = 0);
+		std::vector<std::string> getWrap(const std::string text, float wrap, int * max_width = 0);
 
 		/**
 		* Sets the line height (which should be a number to multiply the font size by,

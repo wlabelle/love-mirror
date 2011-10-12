@@ -25,7 +25,10 @@
 #include <libraries/utf8/utf8.h>
 
 #include <common/math.h>
+#include <common/Matrix.h>
 #include <math.h>
+
+#include <sstream>
 
 #include <algorithm> // for max
 
@@ -103,11 +106,11 @@ namespace opengl
 		glTexSubImage2D(GL_TEXTURE_2D, 0, texture_x, texture_y, w, h, (type == FONT_TRUETYPE ? GL_LUMINANCE_ALPHA : GL_RGBA), GL_UNSIGNED_BYTE, gd->getData());
 		
 		Quad::Viewport v;
-		v.x = texture_x;
-		v.y = texture_y;
-		v.w = w;
-		v.h = h;
-		Quad * q = new Quad(v, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+		v.x = (float) texture_x;
+		v.y = (float) texture_y;
+		v.w = (float) w;
+		v.h = (float) h;
+		Quad * q = new Quad(v, (const float) TEXTURE_WIDTH, (const float) TEXTURE_HEIGHT);
 		const vertex * verts = q->getVertices();
 		
 		glEnableClientState(GL_VERTEX_ARRAY);
@@ -141,32 +144,40 @@ namespace opengl
 		return static_cast<float>(height);
 	}
 
-	void Font::print(std::string text, float x, float y, float angle, float sx, float sy)
+	void Font::print(std::string text, float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky)
 	{
 		float dx = 0.0f; // spacing counter for newline handling
 		glPushMatrix();
 
-		glTranslatef(ceil(x), ceil(y), 0.0f);
-		glRotatef(LOVE_TODEG(angle), 0, 0, 1.0f);
-		glScalef(sx, sy, 1.0f);
-		utf8::iterator<std::string::iterator> i (text.begin(), text.begin(), text.end());
-		utf8::iterator<std::string::iterator> end (text.end(), text.begin(), text.end());
-		while (i != end) {
-			int g = *i++;
-			if (g == '\n') { // wrap newline, but do not print it
-				glTranslatef(-dx, floor(getHeight() * getLineHeight() + 0.5f), 0);
-				dx = 0.0f;
-				continue;
+		Matrix t;
+		t.setTransformation(ceil(x), ceil(y), angle, sx, sy, ox, oy, kx, ky);
+		glMultMatrixf((const GLfloat*)t.getElements());
+		try
+		{
+			utf8::iterator<std::string::iterator> i (text.begin(), text.begin(), text.end());
+			utf8::iterator<std::string::iterator> end (text.end(), text.begin(), text.end());
+			while (i != end) {
+				int g = *i++;
+				if (g == '\n') { // wrap newline, but do not print it
+					glTranslatef(-dx, floor(getHeight() * getLineHeight() + 0.5f), 0);
+					dx = 0.0f;
+					continue;
+				}
+				Glyph * glyph = glyphs[g];
+				if (!glyph) glyph = addGlyph(g);
+				glPushMatrix();
+				// 1.25 is magic line height for true type fonts
+				if (type == FONT_TRUETYPE) glTranslatef(0, floor(getHeight() / 1.25f + 0.5f), 0);
+				glCallList(glyph->list);
+				glPopMatrix();
+				glTranslatef(static_cast<GLfloat>(glyph->spacing), 0, 0);
+				dx += glyph->spacing;
 			}
-			Glyph * glyph = glyphs[g];
-			if (!glyph) glyph = addGlyph(g);
-			glPushMatrix();
-			// 1.25 is magic line height for true type fonts
-			if (type == FONT_TRUETYPE) glTranslatef(0, floor(getHeight() / 1.25f + 0.5f), 0);
-			glCallList(glyph->list);
+		}
+		catch (utf8::exception & e)
+		{
 			glPopMatrix();
-			glTranslatef(static_cast<GLfloat>(glyph->spacing), 0, 0);
-			dx += glyph->spacing;
+			throw love::Exception(1, e.what());
 		}
 		glPopMatrix();
 	}
@@ -188,13 +199,20 @@ namespace opengl
 		
 		Glyph * g;
 
-		utf8::iterator<std::string::const_iterator> i (line.begin(), line.begin(), line.end());
-		utf8::iterator<std::string::const_iterator> end (line.end(), line.begin(), line.end());
-		while (i != end) {
-			int c = *i++;
-			g = glyphs[c];
-			if (!g) g = addGlyph(c);
-			temp += static_cast<int>(g->spacing * mSpacing);
+		try
+		{
+			utf8::iterator<std::string::const_iterator> i (line.begin(), line.begin(), line.end());
+			utf8::iterator<std::string::const_iterator> end (line.end(), line.begin(), line.end());
+			while (i != end) {
+				int c = *i++;
+				g = glyphs[c];
+				if (!g) g = addGlyph(c);
+				temp += static_cast<int>(g->spacing * mSpacing);
+			}
+		}
+		catch (utf8::exception & e)
+		{
+			throw love::Exception(1, e.what());
 		}
 
 		return temp;
@@ -212,45 +230,56 @@ namespace opengl
 		return g->spacing;
 	}
 
-	int Font::getWrap(const std::string & line, float wrap, int * lines)
+	std::vector<std::string> Font::getWrap(const std::string text, float wrap, int * max_width)
 	{
-		if(line.size() == 0) return 0;
+		using namespace std;
+		const float width_space = static_cast<float>(getWidth(' '));
+		vector<string> lines_to_draw;
 		int maxw = 0;
-		int linen = 1;
-		int temp = 0;
-		std::string text;
-		Glyph * g;
 
-		
-		utf8::iterator<std::string::const_iterator> i (line.begin(), line.begin(), line.end());
-		utf8::iterator<std::string::const_iterator> end (line.end(), line.begin(), line.end());
-		while (i != end) {
-			if(temp > wrap && text.find(" ") != std::string::npos)
-			{
-				unsigned int space = text.find_last_of(' ');
-				std::string tmp = text.substr(0, space);
-				int w = getWidth(tmp);
-				if(w > maxw) maxw = w;
-				text = text.substr(space+1);
-				temp = getWidth(text);
-				linen++;
+		//split text at newlines
+		istringstream iss( text );
+		string line;
+		while (getline(iss, line, '\n')) {
+			// split line into words
+			vector<string> words;
+			istringstream word_iss(line);
+			copy(istream_iterator<string>(word_iss), istream_iterator<string>(),
+					back_inserter< vector<string> >(words));
+
+			// put words back together until a wrap occurs
+			float width = 0.0f;
+			float oldwidth = 0.0f;
+			ostringstream string_builder;
+			vector<string>::const_iterator word_iter;
+			for (word_iter = words.begin(); word_iter != words.end(); ++word_iter) {
+				string word( *word_iter );
+				width += getWidth( word );
+
+				// on wordwrap, push line to line buffer and clear string builder
+				if (width >= wrap && oldwidth > 0) {
+					int realw = width;
+					lines_to_draw.push_back( string_builder.str() );
+					string_builder.str( "" );
+					width = static_cast<float>(getWidth( word ));
+					realw -= width;
+					if (realw > maxw)
+						maxw = realw;
+				}
+				string_builder << word << " ";
+				width += width_space;
+				oldwidth = width;
 			}
-			int c = *i++;
-			g = glyphs[c];
-			if (!g) g = addGlyph(c);
-			temp += static_cast<int>(g->spacing * mSpacing);
-			utf8::append(c, text.end());
+			// push last line
+			if (width > maxw)
+				maxw = width;
+			lines_to_draw.push_back( string_builder.str() );
 		}
 
-		if(temp > maxw) maxw = temp;
-		if(lines) *lines = linen;
+		if (max_width)
+			*max_width = maxw;
 
-		return maxw;
-	}
-
-	int Font::getWrap(const char * line, float wrap, int * lines)
-	{
-		return getWrap(std::string(line), wrap, lines);
+		return lines_to_draw;
 	}
 
 	void Font::setLineHeight(float height)

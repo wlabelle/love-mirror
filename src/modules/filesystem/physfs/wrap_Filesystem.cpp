@@ -52,6 +52,14 @@ namespace physfs
 		return 0;
 	}
 
+	int w_setRelease(lua_State * L)
+	{
+		// no error checking needed, everything, even nothing
+		// can be converted to a boolean
+		instance->setRelease(luax_toboolean(L, 1));
+		return 0;
+	}
+
 	int w_setIdentity(lua_State * L)
 	{
 		const char * arg = luaL_checkstring(L, 1);
@@ -213,7 +221,14 @@ namespace physfs
 
 	int w_lines(lua_State * L)
 	{
-		return instance->lines(L);
+		try
+		{
+			return instance->lines(L);
+		}
+		catch (Exception &e)
+		{
+			return luaL_error(L, e.what());
+		}
 	}
 
 	int w_load(lua_State * L)
@@ -236,14 +251,9 @@ namespace physfs
 		const char * filename = lua_tostring(L, -1);
 
 		std::string tmp(filename);
+		tmp += ".lua";
 
 		int size = tmp.size();
-
-		if(size <= 4 || strcmp(filename + (size-4), ".lua") != 0)
-		{
-			tmp.append(".lua");
-			size = tmp.size();
-		}
 
 		for(int i=0;i<size-4;i++)
 		{
@@ -283,13 +293,67 @@ namespace physfs
 			}
 		}
 
-		lua_pushfstring(L, "\n\tno file \"%s\" in LOVE game directories.\n", tmp.c_str());
+		lua_pushfstring(L, "\n\tno file \"%s\" in LOVE game directories.\n", (tmp + ".lua").c_str());
+		return 1;
+	}
+
+	inline const char * library_extension()
+	{
+#ifdef LOVE_WINDOWS
+		return ".dll";
+#elif defined(LOVE_MACOSX) || defined(LOVE_MACOS)
+		return ".dylib";
+#else
+		return ".so";
+#endif
+	}
+
+	int extloader(lua_State * L)
+	{
+		const char * filename = lua_tostring(L, -1);
+		std::string tokenized_name(filename);
+		std::string tokenized_function(filename);
+
+		for (unsigned int i = 0; i < tokenized_name.size(); i++)
+		{
+			if (tokenized_name[i] == '.')
+			{
+				tokenized_name[i] = '/';
+				tokenized_function[i] = '_';
+			}
+		}
+
+		tokenized_name += library_extension();
+
+		void * handle = SDL_LoadObject((std::string(instance->getAppdataDirectory()) + LOVE_PATH_SEPARATOR LOVE_APPDATA_FOLDER LOVE_PATH_SEPARATOR + tokenized_name).c_str());
+		if (!handle && instance->isRelease())
+			handle = SDL_LoadObject((std::string(instance->getSaveDirectory()) + LOVE_PATH_SEPARATOR + tokenized_name).c_str());
+
+		if (!handle)
+		{
+			lua_pushfstring(L, "\n\tno extension \"%s\" in LOVE paths.\n", filename);
+			return 1;
+		}
+
+		void * func = SDL_LoadFunction(handle, ("loveopen_" + tokenized_function).c_str());
+		if (!func)
+			func = SDL_LoadFunction(handle, ("luaopen_" + tokenized_function).c_str());
+
+		if (!func)
+		{
+			SDL_UnloadObject(handle);
+			lua_pushfstring(L, "\n\textension \"%s\" is incompatible.\n", filename);
+			return 1;
+		}
+
+		lua_pushcfunction(L, (lua_CFunction) func);
 		return 1;
 	}
 
 	// List of functions to wrap.
 	static const luaL_Reg functions[] = {
 		{ "init",  w_init },
+		{ "setRelease", w_setRelease },
 		{ "setIdentity",  w_setIdentity },
 		{ "setSource",  w_setSource },
 		{ "newFile",  w_newFile },
@@ -325,7 +389,8 @@ namespace physfs
 			try
 			{
 				instance = new Filesystem();
-				love::luax_register_searcher(L, loader);
+				love::luax_register_searcher(L, loader, 1);
+				love::luax_register_searcher(L, extloader, 2);
 			}
 			catch(Exception & e)
 			{
@@ -335,7 +400,8 @@ namespace physfs
 		else
 		{
 			instance->retain();
-			love::luax_register_searcher(L, loader);
+			love::luax_register_searcher(L, loader, 1);
+			love::luax_register_searcher(L, extloader, 2);
 		}
 
 		WrappedModule w;

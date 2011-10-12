@@ -62,8 +62,14 @@ namespace openal
 		float velocity[3];
 		float direction[3];
 		bool looping;
+		bool paused;
+		
+		float offsetSamples;
+		float offsetSeconds;
 
 		love::sound::Decoder * decoder;
+
+		unsigned int toLoop;
 
 	public:
 		Source(Pool * pool, love::sound::SoundData * soundData);
@@ -79,11 +85,15 @@ namespace openal
 		virtual bool isStopped() const;
 		virtual bool isPaused() const;
 		virtual bool isFinished() const;
-		virtual void update();
+		virtual bool update();
 		virtual void setPitch(float pitch);
 		virtual float getPitch() const;
 		virtual void setVolume(float volume);
 		virtual float getVolume() const;
+		virtual void seekAtomic(float offset, void * unit);
+		virtual void seek(float offset, Unit unit);
+		virtual float tellAtomic(void * unit) const;
+		virtual float tell(Unit unit);
 		virtual void setPosition(float * v);
 		virtual void getPosition(float * v) const;
 		virtual void setVelocity(float * v);

@@ -36,8 +36,6 @@ namespace love
 {
 namespace thread
 {
-namespace sdl
-{
 	Thread *luax_checkthread(lua_State *L, int idx)
 	{
 		return luax_checktype<Thread>(L, idx, "Thread", THREAD_THREAD_T);
@@ -72,18 +70,12 @@ namespace sdl
 		return 1;
 	}
 
-	int w_Thread_get(lua_State *L)
+	bool __pushThreadVariant(lua_State *L, ThreadVariant *v)
 	{
-		Thread *t = luax_checkthread(L, 1);
-		std::string name = luax_checklstring(L, 2);
-		t->lock();
-		ThreadVariant *v = t->get(name);
-		t->clear(name);
-		t->unlock();
 		if (!v)
 		{
 			lua_pushnil(L);
-			return 1;
+			return false;
 		}
 		switch(v->type)
 		{
@@ -100,20 +92,56 @@ namespace sdl
 				lua_pushlightuserdata(L, v->data.userdata);
 				break;
 			case FUSERDATA:
-			{
-				const char *name = NULL;
-				love::types.find(v->udatatype, name);
-				((love::Object *) v->data.userdata)->retain();
-				luax_newtype(L, name, v->flags, v->data.userdata);
+				if (v->udatatype != INVALID_ID)
+				{
+					const char *name = NULL;
+					love::types.find(v->udatatype, name);
+					((love::Object *) v->data.userdata)->retain();
+					luax_newtype(L, name, v->flags, v->data.userdata);
+				}
+				else
+					lua_pushlightuserdata(L, v->data.userdata);
+				// I know this is not the same
+				// sadly, however, it's the most
+				// I can do (at the moment).
 				break;
-			}
 			default:
 				lua_pushnil(L);
 				break;
 		}
+		return true;
+	}
+
+	int w_Thread_get(lua_State *L)
+	{
+		Thread *t = luax_checkthread(L, 1);
+		std::string name = luax_checklstring(L, 2);
+		t->lock();
+		ThreadVariant *v = t->get(name);
+		t->clear(name);
+		t->unlock();
+		if (!__pushThreadVariant(L, v))
+			return 1;
 		t->lock();
 		v->release();
 		t->unlock();
+		return 1;
+	}
+
+	int w_Thread_getKeys(lua_State *L)
+	{
+		Thread *t = luax_checkthread(L, 1);
+		t->lock();
+		std::vector<std::string> keys = t->getKeys();
+		t->unlock();
+		lua_createtable(L, keys.size(), 0);
+		int i = 1;
+		for (std::vector<std::string>::iterator it = keys.begin(); it != keys.end(); it++)
+		{
+			lua_pushnumber(L, i++);
+			lua_pushlstring(L, it->c_str(), it->length());
+			lua_settable(L, -3);
+		}
 		return 1;
 	}
 
@@ -125,37 +153,8 @@ namespace sdl
 		ThreadVariant *v = t->demand(name);
 		t->clear(name);
 		t->unlock();
-		if (!v)
-		{
-			lua_pushnil(L);
+		if (!__pushThreadVariant(L, v))
 			return 1;
-		}
-		switch(v->type)
-		{
-			case BOOLEAN:
-				lua_pushboolean(L, v->data.boolean);
-				break;
-			case NUMBER:
-				lua_pushnumber(L, v->data.number);
-				break;
-			case STRING:
-				lua_pushlstring(L, v->data.string.str, v->data.string.len);
-				break;
-			case LUSERDATA:
-				lua_pushlightuserdata(L, v->data.userdata);
-				break;
-			case FUSERDATA:
-			{
-				const char *name = NULL;
-				types.find(v->udatatype, name);
-				((love::Object *) v->data.userdata)->retain();
-				luax_newtype(L, name, v->flags, v->data.userdata);
-				break;
-			}
-			default:
-				lua_pushnil(L);
-				break;
-		}
 		t->lock();
 		v->release();
 		t->unlock();
@@ -169,37 +168,8 @@ namespace sdl
 		t->lock();
 		ThreadVariant *v = t->get(name);
 		t->unlock();
-		if (!v)
-		{
-			lua_pushnil(L);
+		if (!__pushThreadVariant(L, v))
 			return 1;
-		}
-		switch(v->type)
-		{
-			case BOOLEAN:
-				lua_pushboolean(L, v->data.boolean);
-				break;
-			case NUMBER:
-				lua_pushnumber(L, v->data.number);
-				break;
-			case STRING:
-				lua_pushlstring(L, v->data.string.str, v->data.string.len);
-				break;
-			case LUSERDATA:
-				lua_pushlightuserdata(L, v->data.userdata);
-				break;
-			case FUSERDATA:
-			{
-				const char *name = NULL;
-				types.find(v->udatatype, name);
-				((love::Object *) v->data.userdata)->retain();
-				luax_newtype(L, name, v->flags, v->data.userdata);
-				break;
-			}
-			default:
-				lua_pushnil(L);
-				break;
-		}
 		t->lock();
 		v->release();
 		t->unlock();
@@ -207,54 +177,53 @@ namespace sdl
 	}
 
 	Type extractudatatype(lua_State * L, int idx)
-	{
-		Type t = INVALID_ID;
-		if (!lua_isuserdata(L, idx))
-			return t;
-		if (luaL_getmetafield (L, idx, "__tostring") == 0)
-			return t;
-		lua_pushvalue(L, idx);
-		int result = lua_pcall(L, 1, 1, 0);
-		if (result == 0)
-			types.find(lua_tostring(L, -1), t);
-		if (result == 0 || result == LUA_ERRRUN)
-			lua_pop(L, 1);
-		return t;
-	}
+        {
+                Type t = INVALID_ID;
+                if (!lua_isuserdata(L, idx))
+                        return t;
+                if (luaL_getmetafield (L, idx, "__tostring") == 0)
+                        return t;
+                lua_pushvalue(L, idx);
+                int result = lua_pcall(L, 1, 1, 0);
+                if (result == 0)
+                        types.find(lua_tostring(L, -1), t);
+                if (result == 0 || result == LUA_ERRRUN)
+                        lua_pop(L, 1);
+                return t;
+        }
 
 	int w_Thread_set(lua_State *L)
 	{
 		Thread *t = luax_checkthread(L, 1);
 		std::string name = luax_checklstring(L, 2);
 		ThreadVariant *v;
-		if (lua_isboolean(L, 3))
+		size_t len;
+		const char *str;
+		switch(lua_type(L, 3))
 		{
-			v = new ThreadVariant(luax_toboolean(L, 3));
-		}
-		else if (lua_isnumber(L, 3))
-		{
-			v = new ThreadVariant(lua_tonumber(L, 3));
-		}
-		else if (lua_isstring(L, 3))
-		{
-			size_t len;
-			const char *str = lua_tolstring(L, 3, &len);
-			v = new ThreadVariant(str, len);
-		}
-		else if (lua_islightuserdata(L, 3))
-		{
-			v = new ThreadVariant(lua_touserdata(L, 3));
-		}
-		else if (lua_isuserdata(L, 3))
-		{
-			v = new ThreadVariant(extractudatatype(L, 3), lua_touserdata(L, 3));
-		}
-		else
-		{
-			return luaL_error(L, "Expected boolean, number, string or userdata");
+			case LUA_TBOOLEAN:
+				v = new ThreadVariant(luax_toboolean(L, 3));
+				break;
+			case LUA_TNUMBER:
+				v = new ThreadVariant(lua_tonumber(L, 3));
+				break;
+			case LUA_TSTRING:
+				str = lua_tolstring(L, 3, &len);
+				v = new ThreadVariant(str, len);
+				break;
+			case LUA_TLIGHTUSERDATA:
+				v = new ThreadVariant(lua_touserdata(L, 3));
+				break;
+			case LUA_TUSERDATA:
+				v = new ThreadVariant(extractudatatype(L, 3), lua_touserdata(L, 3));
+				break;
+			default:
+				return luaL_error(L, "Expected boolean, number, string or userdata");
 		}
 		t->set(name, v);
+		t->lock();
 		v->release();
+		t->unlock();
 		return 0;
 	}
 
@@ -264,6 +233,7 @@ namespace sdl
 		{ "wait", w_Thread_wait },
 		{ "getName", w_Thread_getName },
 		{ "get", w_Thread_get },
+		{ "getKeys", w_Thread_getKeys },
 		{ "demand", w_Thread_demand },
 		{ "peek", w_Thread_peek },
 		{ "set", w_Thread_set },
@@ -388,6 +358,5 @@ namespace sdl
 
 		return luax_register_module(L, w);
 	}
-}
 }
 }
