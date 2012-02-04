@@ -22,6 +22,7 @@
 #define LOVE_MATH_H
 
 #include <climits> // for CHAR_BIT
+#include <cstdlib> // for rand()
 
 /* Definitions of useful mathematical constants
  * M_E        - e
@@ -78,6 +79,18 @@ inline int next_p2(int x)
 inline float next_p2(float x)
 {
 	return static_cast<float>(next_p2(static_cast<int>(x)));
+}
+
+template<typename T>
+inline T random()
+{
+	return T(rand()) / (T(RAND_MAX)+T(1));
+}
+
+template<typename T>
+inline T random(T min, T max)
+{
+	return random<T>() * (max - min) + min;
 }
 
 } // love
