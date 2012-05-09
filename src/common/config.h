@@ -39,7 +39,7 @@
 #if defined(__i386__) || defined(__i386)
 #	define LOVE_LITTLE_ENDIAN 1
 #endif
-#if defined(__ppc__) || defined(__ppc)
+#if defined(__ppc__) || defined(__ppc) || defined(__powerpc__) || defined(__powerpc)
 #	define LOVE_BIG_ENDIAN 1
 #endif
 
@@ -48,6 +48,7 @@
 #	define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// Preferably, and ironically, this macro should go unused.
 #ifndef LOVE_UNUSED
 #	define LOVE_UNUSED(x) (void)sizeof(x)
 #endif
@@ -80,6 +81,13 @@
 #ifdef HAVE_CONFIG_H
 #	include <../config.h>
 #	undef VERSION
+#	ifdef WORDS_BIGENDIAN
+#		undef LOVE_LITTLE_ENDIAN
+#		define LOVE_BIG_ENDIAN 1
+#	else
+#		undef LOVE_BIG_ENDIAN
+#		define LOVE_LITTLE_ENDIAN 1
+#	endif
 #endif
 
 #endif // LOVE_CONFIG_H
