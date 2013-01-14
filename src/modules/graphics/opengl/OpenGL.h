@@ -18,8 +18,8 @@
  * 3. This notice may not be removed or altered from any source distribution.
  **/
 
-#ifndef LOVE_COMMON_OPENGL_H
-#define LOVE_COMMON_OPENGL_H
+#ifndef LOVE_GRAPHICS_OPENGL_OPENGL_H
+#define LOVE_GRAPHICS_OPENGL_OPENGL_H
 
 #include "GLee.h"
 #include "graphics/Image.h"
@@ -31,20 +31,38 @@ namespace graphics
 namespace opengl
 {
 
-// resets the stored bound texture id
-void resetBoundTexture();
+void initializeContext();
+
+void uninitializeContext();
+
+/**
+ * Helper for setting the active texture unit
+ * 
+ * @param textureunit The GL texture unit to set
+ **/
+void setActiveTextureUnit(GLenum textureunit);
 
 /**
  * Helper for binding an OpenGL texture.
  * Makes sure we aren't redundantly binding textures.
+ * 
  * @param texture The texture to bind.
- * @param override Overrides the checks to guarantee texture bind
  **/
-void bindTexture(GLuint texture, bool override = false);
+void bindTexture(GLuint texture);
+
+/**
+ * Helper for binding a texture to a specific texture unit
+ * 
+ * @param texture The texture to bind
+ * @param textureunit The texture unit to switch to
+ * @param resoreprev Restore previous texture unit when done
+ **/
+void bindTextureToUnit(GLuint texture, GLenum textureunit, bool restoreprev);
 
 /**
  * Helper for deleting an OpenGL texture.
  * Cleans up if the texture is currently bound.
+ * 
  * @param texture The texture to delete.
  **/
 void deleteTexture(GLuint texture);
