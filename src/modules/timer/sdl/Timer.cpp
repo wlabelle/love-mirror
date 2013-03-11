@@ -41,6 +41,7 @@ Timer::Timer()
 	: currTime(0)
 	, prevFpsUpdate(0)
 	, fps(0)
+	, averageDelta(0)
 	, fpsUpdateFrequency(1)
 	, frames(0)
 	, dt(0)
@@ -70,22 +71,23 @@ void Timer::step()
 	prevTime = currTime;
 
 	// Get ticks from SDL
-	currTime = SDL_GetTicks();
+	currTime = getMicroTime();
 
 	// Convert to number of seconds
-	dt = (currTime - prevTime)/1000.0;
+	dt = currTime - prevTime;
 
-	double timeSinceLast = (currTime - prevFpsUpdate)/1000.0;
+	double timeSinceLast = currTime - prevFpsUpdate;
 	// Update FPS?
 	if (timeSinceLast > fpsUpdateFrequency)
 	{
 		fps = int((frames/timeSinceLast) + 0.5);
+		averageDelta = timeSinceLast/frames;
 		prevFpsUpdate = currTime;
 		frames = 0;
 	}
 }
 
-void Timer::sleep(double seconds)
+void Timer::sleep(double seconds) const
 {
 	if (seconds > 0)
 		delay((int)(seconds*1000));
@@ -99,6 +101,11 @@ double Timer::getDelta() const
 int Timer::getFPS() const
 {
 	return fps;
+}
+
+double Timer::getAverageDelta() const
+{
+	return averageDelta;
 }
 
 double Timer::getTime() const
