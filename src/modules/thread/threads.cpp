@@ -42,6 +42,37 @@ Lock::~Lock()
 	mutex->unlock();
 }
 
+EmptyLock::EmptyLock()
+	: mutex(0)
+{
+}
+
+EmptyLock::~EmptyLock()
+{
+	if (mutex)
+		mutex->unlock();
+}
+
+void EmptyLock::setLock(Mutex *m)
+{
+	if (mutex)
+		mutex->unlock();
+
+	mutex = m;
+
+	if (mutex)
+		mutex->lock();
+}
+
+void EmptyLock::setLock(Mutex &m)
+{
+	if (mutex)
+		mutex->unlock();
+
+	mutex = &m;
+	mutex->lock();
+}
+
 Threadable::Threadable()
 {
 	owner = newThread(this);
@@ -60,11 +91,6 @@ bool Threadable::start()
 void Threadable::wait()
 {
 	owner->wait();
-}
-
-void Threadable::kill()
-{
-	owner->kill();
 }
 
 } // thread

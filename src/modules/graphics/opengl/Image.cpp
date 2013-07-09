@@ -37,7 +37,8 @@ Image::FilterMode Image::defaultMipmapFilter = Image::FILTER_NONE;
 float Image::defaultMipmapSharpness = 0.0f;
 
 Image::Image(love::image::ImageData *data)
-	: cdata(0)
+	: data(data)
+	, cdata(0)
 	, width((float)(data->getWidth()))
 	, height((float)(data->getHeight()))
 	, texture(0)
@@ -46,12 +47,12 @@ Image::Image(love::image::ImageData *data)
 	, compressed(false)
 {
 	data->retain();
-	this->data = data;
 	preload();
 }
 
 Image::Image(love::image::CompressedData *cdata)
 	: data(0)
+	, cdata(cdata)
 	, width((float)(cdata->getWidth(0)))
 	, height((float)(cdata->getHeight(0)))
 	, texture(0)
@@ -60,7 +61,6 @@ Image::Image(love::image::CompressedData *cdata)
 	, compressed(true)
 {
 	cdata->retain();
-	this->cdata = cdata;
 	preload();
 }
 
@@ -165,6 +165,7 @@ void Image::uploadCompressedMipmaps()
 
 void Image::createMipmaps()
 {
+	// Only valid for Images created with ImageData.
 	if (!data)
 		return;
 
@@ -182,6 +183,9 @@ void Image::createMipmaps()
 	}
 
 	bind();
+
+	// Prevent other threads from changing the ImageData while we upload it.
+	love::thread::Lock lock(data->getMutex());
 
 	if (hasNpot() && (GLEE_VERSION_3_0 || GLEE_ARB_framebuffer_object))
 	{
@@ -365,6 +369,7 @@ bool Image::loadVolatilePOT()
 
 	filter.anisotropy = gl.setTextureFilter(filter);
 	gl.setTextureWrap(wrap);
+	setMipmapSharpness(mipmapSharpness);
 
 	float p2width = next_p2(width);
 	float p2height = next_p2(height);
@@ -375,6 +380,9 @@ bool Image::loadVolatilePOT()
 	vertices[2].t = t;
 	vertices[2].s = s;
 	vertices[3].s = s;
+
+	// We want this lock to potentially cover mipmap creation as well.
+	love::thread::EmptyLock lock;
 
 	while (glGetError() != GL_NO_ERROR); // clear errors
 
@@ -407,6 +415,7 @@ bool Image::loadVolatilePOT()
 		             GL_UNSIGNED_BYTE,
 		             0);
 
+		lock.setLock(data->getMutex());
 		glTexSubImage2D(GL_TEXTURE_2D,
 		                0,
 		                0, 0,
@@ -423,8 +432,6 @@ bool Image::loadVolatilePOT()
 	mipmapsCreated = false;
 	checkMipmapsCreated();
 
-	setMipmapSharpness(mipmapSharpness);
-
 	return true;
 }
 
@@ -435,6 +442,10 @@ bool Image::loadVolatileNPOT()
 
 	filter.anisotropy = gl.setTextureFilter(filter);
 	gl.setTextureWrap(wrap);
+	setMipmapSharpness(mipmapSharpness);
+
+	// We want this lock to potentially cover mipmap creation as well.
+	love::thread::EmptyLock lock;
 
 	while (glGetError() != GL_NO_ERROR); // clear errors
 
@@ -452,6 +463,7 @@ bool Image::loadVolatileNPOT()
 	}
 	else if (data)
 	{
+		lock.setLock(data->getMutex());
 		glTexImage2D(GL_TEXTURE_2D,
 		             0,
 		             GL_RGBA8,
@@ -468,8 +480,6 @@ bool Image::loadVolatileNPOT()
 
 	mipmapsCreated = false;
 	checkMipmapsCreated();
-
-	setMipmapSharpness(mipmapSharpness);
 
 	return true;
 }
@@ -490,6 +500,9 @@ bool Image::refresh()
 	if (texture == 0)
 		return false;
 
+	// We want this lock to potentially cover mipmap creation as well.
+	love::thread::EmptyLock lock;
+
 	bind();
 
 	if (isCompressed() && cdata)
@@ -497,7 +510,7 @@ bool Image::refresh()
 		GLenum format = getCompressedFormat(cdata->getType());
 		glCompressedTexSubImage2DARB(GL_TEXTURE_2D,
 		                             0,
-								     0, 0,
+		                             0, 0,
 		                             cdata->getWidth(0),
 		                             cdata->getHeight(0),
 		                             format,
@@ -506,6 +519,7 @@ bool Image::refresh()
 	}
 	else if (data)
 	{
+		lock.setLock(data->getMutex());
 		glTexSubImage2D(GL_TEXTURE_2D,
 		                0,
 		                0, 0,

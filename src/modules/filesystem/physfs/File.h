@@ -43,17 +43,6 @@ namespace physfs
 
 class File : public love::filesystem::File
 {
-private:
-
-	// filename
-	std::string filename;
-
-	// PHYSFS File handle.
-	PHYSFS_file *file;
-
-	// The current mode of the file.
-	Mode mode;
-
 public:
 
 	/**
@@ -68,17 +57,35 @@ public:
 	// Implements love::filesystem::File.
 	bool open(Mode mode);
 	bool close();
+	bool isOpen() const;
 	int64 getSize();
 	FileData *read(int64 size = ALL);
 	int64 read(void *dst, int64 size);
 	bool write(const void *data, int64 size);
 	bool write(const Data *data, int64 size = ALL);
+	bool flush();
 	bool eof();
 	int64 tell();
 	bool seek(uint64 pos);
-	Mode getMode();
+	bool setBuffer(BufferMode bufmode, int64 size);
+	BufferMode getBuffer(int64 &size) const;
+	Mode getMode() const;
 	std::string getFilename() const;
 	std::string getExtension() const;
+
+private:
+
+	// filename
+	std::string filename;
+
+	// PHYSFS File handle.
+	PHYSFS_File *file;
+
+	// The current mode of the file.
+	Mode mode;
+
+	BufferMode bufferMode;
+	int64 bufferSize;
 
 }; // File
 

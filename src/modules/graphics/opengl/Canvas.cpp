@@ -179,7 +179,7 @@ struct FramebufferStrategyGL3 : public FramebufferStrategy
 		std::vector<GLenum> drawbuffers;
 		drawbuffers.push_back(GL_COLOR_ATTACHMENT0);
 
-		// attach the canvas framebuffer textures to the currently bound framebuffer
+		// Attach the canvas textures to the currently bound framebuffer.
 		for (size_t i = 0; i < canvases.size(); i++)
 		{
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1 + i,
@@ -290,7 +290,7 @@ struct FramebufferStrategyPackedEXT : public FramebufferStrategy
 		std::vector<GLenum> drawbuffers;
 		drawbuffers.push_back(GL_COLOR_ATTACHMENT0_EXT);
 
-		// attach the canvas framebuffer textures to the currently bound framebuffer
+		// Attach the canvas textures to the currently bound framebuffer.
 		for (size_t i = 0; i < canvases.size(); i++)
 		{
 			glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1_EXT + i,
@@ -452,7 +452,7 @@ void Canvas::setupGrab()
 	if (current != NULL)
 		current->stopGrab();
 
-	// bind buffer and clear screen
+	// bind the framebuffer object.
 	glPushAttrib(GL_VIEWPORT_BIT | GL_TRANSFORM_BIT);
 	strategy->bindFBO(fbo);
 	gl.setViewport(OpenGL::Viewport(0, 0, width, height));
@@ -474,6 +474,10 @@ void Canvas::setupGrab()
 
 void Canvas::startGrab(const std::vector<Canvas *> &canvases)
 {
+	// Whether the new canvas list is different from the old one.
+	// A more thorough check is done below.
+	bool canvaseschanged = canvases.size() != attachedCanvases.size();
+
 	if (canvases.size() > 0)
 	{
 		if (!isMultiCanvasSupported())
@@ -490,22 +494,23 @@ void Canvas::startGrab(const std::vector<Canvas *> &canvases)
 
 		if (canvases[i]->getTextureType() != texture_type)
 			throw love::Exception("All canvas arguments must have the same texture type.");
+
+		if (!canvaseschanged && canvases[i] != attachedCanvases[i])
+			canvaseschanged = true;
 	}
 
 	setupGrab();
 
-	// don't attach anything if there's nothing to attach/detach
-	if (canvases.size() == 0 && attachedCanvases.size() == 0)
+	// Don't attach anything if there's nothing to change.
+	if (!canvaseschanged)
 		return;
 
-	// attach the canvas textures to the active FBO and set up multiple render targets
+	// Attach the canvas textures to the active FBO and set up MRTs.
 	strategy->setAttachments(canvases);
 
-	// retain newly attached canvases
 	for (size_t i = 0; i < canvases.size(); i++)
 		canvases[i]->retain();
 
-	// release any old canvases
 	for (size_t i = 0; i < attachedCanvases.size(); i++)
 		attachedCanvases[i]->release();
 
@@ -555,23 +560,40 @@ void Canvas::clear(const Color &c)
 		strategy->bindFBO(fbo);
 	}
 
-	// Make sure only this canvas is cleared when multi-canvas rendering is set.
-	if (attachedCanvases.size() > 0)
-		strategy->setAttachments();
+	// We don't need to worry about multiple FBO attachments or global clear
+	// color state when OpenGL 3.0+ is supported.
+	if (GLEE_VERSION_3_0)
+	{
+		GLuint glcolor[] = {c.r, c.g, c.b, c.a};
+		glClearBufferuiv(GL_COLOR, 0, glcolor);
 
-	// Don't use the state-shadowed gl.setClearColor because we want to save the
-	// previous clear color.
-	glClearColor((float)c.r/255.0f, (float)c.g/255.0f, (float)c.b/255.0f, (float)c.a/255.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		if (depth_stencil != 0)
+		{
+			GLint stencilvalue = 0;
+			glClearBufferiv(GL_STENCIL, 0, &stencilvalue);
+		}
+	}
+	else
+	{
+		// glClear will clear all active draw buffers, so we need to temporarily
+		// detach any other canvases (when MRT is being used.)
+		if (attachedCanvases.size() > 0)
+			strategy->setAttachments();
 
-	if (attachedCanvases.size() > 0)
-		strategy->setAttachments(attachedCanvases);
+		// Don't use the state-shadowed gl.setClearColor because we want to save
+		// the previous clear color.
+		glClearColor((float)c.r/255.0f, (float)c.g/255.0f, (float)c.b/255.0f, (float)c.a/255.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+		if (attachedCanvases.size() > 0)
+			strategy->setAttachments(attachedCanvases);
+
+		// Restore the global clear color.
+		gl.setClearColor(gl.getClearColor());
+	}
 
 	if (current != this)
 		strategy->bindFBO(previous);
-
-	// Restore the previous clear color.
-	gl.setClearColor(gl.getClearColor());
 }
 
 void Canvas::draw(float x, float y, float angle, float sx, float sy, float ox, float oy, float kx, float ky) const
@@ -618,7 +640,7 @@ void Canvas::drawg(love::graphics::Geometry *geom, float x, float y, float angle
 bool Canvas::checkCreateStencil()
 {
 	// Do nothing if we've already created the stencil buffer.
-	if (depth_stencil)
+	if (depth_stencil != 0)
 		return true;
 
 	if (current != this)

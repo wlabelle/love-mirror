@@ -37,12 +37,17 @@ File *luax_checkfile(lua_State *L, int idx);
 int w_File_getSize(lua_State *L);
 int w_File_open(lua_State *L);
 int w_File_close(lua_State *L);
+int w_File_isOpen(lua_State *L);
 int w_File_read(lua_State *L);
 int w_File_write(lua_State *L);
+int w_File_flush(lua_State *L);
 int w_File_eof(lua_State *L);
 int w_File_tell(lua_State *L);
 int w_File_seek(lua_State *L);
 int w_File_lines(lua_State *L);
+int w_File_setBuffer(lua_State *L);
+int w_File_getBuffer(lua_State *L);
+int w_File_getMode(lua_State *L);
 extern "C" int luaopen_file(lua_State *L);
 
 } // physfs
