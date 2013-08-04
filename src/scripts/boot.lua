@@ -191,6 +191,9 @@ function love.createhandlers()
 		quit = function ()
 			return
 		end,
+		threaderror = function (t, err)
+			if love.threaderror then return love.threaderror(t, err) end
+		end,
 		resize = function(w, h)
 			local ow, oh, flags = love.window.getMode()
 			if flags.resizable then
@@ -291,6 +294,7 @@ function love.init()
 		},
 		console = false, -- Only relevant for windows.
 		identity = false,
+		identityorder = "first",
 		release = false,
 	}
 
@@ -378,8 +382,10 @@ function love.init()
 
 	if love.filesystem then
 		love.filesystem.setRelease(c.release and is_fused_game)
-		if c.identity then love.filesystem.setIdentity(c.identity) end
-		if love.filesystem.exists("main.lua") then require("main") end
+		love.filesystem.setIdentity(c.identity or love.filesystem.getIdentity(), c.identityorder)
+		if love.filesystem.exists("main.lua") then
+			require("main")
+		end
 	end
 
 	if no_game_code then

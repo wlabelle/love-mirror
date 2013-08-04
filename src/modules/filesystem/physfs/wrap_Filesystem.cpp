@@ -77,7 +77,13 @@ int w_setIdentity(lua_State *L)
 {
 	const char *arg = luaL_checkstring(L, 1);
 
-	if (!instance->setIdentity(arg))
+	Filesystem::SearchOrder order = Filesystem::SEARCH_ORDER_FIRST;
+	const char *ostr = lua_isnoneornil(L, 2) ? 0 : lua_tostring(L, 2);
+
+	if (ostr && !Filesystem::getConstant(ostr, order))
+		return luaL_error(L, "Invalid filesystem search order: %s", ostr);
+
+	if (!instance->setIdentity(arg, order))
 		return luaL_error(L, "Could not set write directory.");
 
 	return 0;
@@ -104,7 +110,13 @@ int w_mount(lua_State *L)
 	const char *archive = luaL_checkstring(L, 1);
 	const char *mountpoint = luaL_checkstring(L, 2);
 
-	luax_pushboolean(L, instance->mount(archive, mountpoint));
+	Filesystem::SearchOrder order = Filesystem::SEARCH_ORDER_FIRST;
+	const char *ostr = lua_isnoneornil(L, 3) ? 0 : lua_tostring(L, 3);
+
+	if (ostr && !Filesystem::getConstant(ostr, order))
+		return luaL_error(L, "Invalid filesystem search order: %s", ostr);
+
+	luax_pushboolean(L, instance->mount(archive, mountpoint, order));
 	return 1;
 }
 
@@ -186,8 +198,8 @@ int w_newFileData(lua_State *L)
 
 	FileData::Decoder decoder = FileData::FILE;
 
-	if (decstr)
-		FileData::getConstant(decstr, decoder);
+	if (decstr && !FileData::getConstant(decstr, decoder))
+		return luaL_error(L, "Invalid FileData decoder: %s", decstr);
 
 	FileData *t = 0;
 
@@ -200,7 +212,7 @@ int w_newFileData(lua_State *L)
 		t = instance->newFileData(str, filename);
 		break;
 	default:
-		return luaL_error(L, "Unrecognized FileData decoder: %s", decstr);
+		return luaL_error(L, "Invalid FileData decoder: %s", decstr);
 	}
 
 	luax_newtype(L, "FileData", FILESYSTEM_FILE_DATA_T, (void *)t);

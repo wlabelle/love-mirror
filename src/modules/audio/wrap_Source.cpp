@@ -100,11 +100,13 @@ int w_Source_seek(lua_State *L)
 	Source *t = luax_checksource(L, 1);
 	float offset = (float)luaL_checknumber(L, 2);
 	if (offset < 0)
-		return luaL_error(L, "Can't seek to a negative position");
+		return luaL_argerror(L, 2, "can't seek to a negative position");
 
-	const char *unit = luaL_optstring(L, 3, "seconds");
-	Source::Unit u;
-	t->getConstant(unit, u);
+	Source::Unit u = Source::UNIT_SECONDS;
+	const char *unit = lua_isnoneornil(L, 3) ? 0 : lua_tostring(L, 3);
+	if (unit && !t->getConstant(unit, u))
+		return luaL_error(L, "Invalid Source time unit: %s", unit);
+
 	t->seek(offset, u);
 	return 0;
 }
@@ -112,9 +114,12 @@ int w_Source_seek(lua_State *L)
 int w_Source_tell(lua_State *L)
 {
 	Source *t = luax_checksource(L, 1);
-	const char *unit = luaL_optstring(L, 2, "seconds");
-	Source::Unit u;
-	t->getConstant(unit, u);
+
+	Source::Unit u = Source::UNIT_SECONDS;
+	const char *unit = lua_isnoneornil(L, 2) ? 0 : lua_tostring(L, 2);
+	if (unit && !t->getConstant(unit, u))
+		return luaL_error(L, "Invalid Source time unit: %s", unit);
+
 	lua_pushnumber(L, t->tell(u));
 	return 1;
 }
@@ -284,6 +289,19 @@ int w_Source_getRolloff(lua_State *L)
 	return 1;
 }
 
+int w_Source_getType(lua_State *L)
+{
+	Source *t = luax_checksource(L, 1);
+	Source::Type stype = t->getType();
+	const char *typestr;
+
+	if (!Source::getConstant(stype, typestr))
+		return luaL_error(L, "Unknown Source type.");
+
+	lua_pushstring(L, typestr);
+	return 1;
+}
+
 static const luaL_Reg functions[] =
 {
 	{ "play", w_Source_play },
@@ -318,6 +336,8 @@ static const luaL_Reg functions[] =
 	{ "getDistance", w_Source_getDistance },
 	{ "setRolloff", w_Source_setRolloff},
 	{ "getRolloff", w_Source_getRolloff},
+
+	{ "getType", w_Source_getType },
 
 	{ 0, 0 }
 };
